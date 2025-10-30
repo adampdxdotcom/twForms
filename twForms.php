@@ -1,0 +1,27 @@
+<?php
+/**
+ * Plugin Name:       My Site Functionality
+ * Description:       A collection of custom code for the message inbox and forms.
+ * Version:           1.0.0
+ * Author:            Your Name
+ */
+
+// If this file is called directly, abort.
+if ( ! defined( 'WPINC' ) ) {
+    die;
+}
+
+// =============================================================================
+// == Load all plugin components
+// =============================================================================
+
+// Use plugin_dir_path( __FILE__ ) to get the full server path to this folder.
+
+// Loads the backend Message Inbox and Blacklist UI
+require_once plugin_dir_path( __FILE__ ) . 'includes/01-admin-inbox.php';
+
+// Loads reusable helper functions for forms (validation, email sending, etc.)
+require_once plugin_dir_path( __FILE__ ) . 'includes/02-form-helpers.php';
+
+// Loads the form shortcodes, processing logic, and related scripts
+require_once plugin_dir_path( __FILE__ ) . 'includes/03-form-processor.php';
