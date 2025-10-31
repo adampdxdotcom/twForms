@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       My Site Functionality
- * Description:       A collection of custom code for the message inbox and forms.
+ * Plugin Name:       TW Forms
+ * Description:       A custom forms and messaging plugin for the Theatre West website
  * Version:           1.0.0
- * Author:            Your Name
+ * Author:            Adam Michaels
  */
 
 // If this file is called directly, abort.
