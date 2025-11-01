@@ -118,7 +118,7 @@ if ( ! class_exists( 'Messages_List_Table' ) ) {
 if ( ! function_exists( 'render_message_detail_view' ) ) {
     function render_message_detail_view() {
         $entry_id = isset($_GET['entry_id']) ? intval($_GET['entry_id']) : 0; if (!$entry_id) { wp_die('Invalid entry ID.'); } 
-        $pod = pods('messages', ['id' => $entry_id, 'post_status' => 'any']); if (!$pod->exists()) { wp_die('Entry not found.'); }
+        $pod = pods('messages', $entry_id); if (!$pod->exists()) { wp_die('Entry not found.'); }
         if ($pod->field('entry_status') === 'Unread' && $pod->field('post_status') === 'publish') { $pod->save('entry_status', 'Read'); }
         $raw_message = $pod->field('message'); $user_message = $raw_message; $auto_data = ''; $parts = explode("\n\n---\n\n", $raw_message, 2); 
         if (count($parts) === 2) { $user_message = $parts[0]; $auto_data = $parts[1]; }
