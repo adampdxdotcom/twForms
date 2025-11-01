@@ -72,6 +72,8 @@ if ( ! function_exists('volunteer_form_handler') ) {
             }
         }
         ob_start(); ?>
+
+
 <div id="volunteer-form-status" class="form-status-message">
             <?php echo $debug_message . $status_message; ?>
         </div>
@@ -87,15 +89,6 @@ if ( ! function_exists('volunteer_form_handler') ) {
             <input type="hidden" name="form_timestamp" value="<?php echo base64_encode(time()); ?>">
 
             <?php wp_nonce_field( 'process_volunteer_form', 'volunteer_form_nonce' ); ?>
-
-            <!-- Newsletter Signup Section (Moved to top) -->
-            <div style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
-                <h2>Please check this box if you want the newsletter</h2>
-                <p style="font-size: 0.9em; color: #555; margin-top: 5px;">If you only want the newsletter you may leave the rest of the form blank.</p>
-                <label style="font-weight: bold; font-size: 1.1em;">
-                    <input type="checkbox" name="newsletter" value="yes" style="width: auto; height: 1.1em; vertical-align: middle; margin-right: 8px;">Sign me up to the newsletter
-                </label>
-            </div>
 
             <!-- Name Fields -->
             <div style="display: flex; gap: 25px; margin-bottom: 15px;">
@@ -125,6 +118,15 @@ if ( ! function_exists('volunteer_form_handler') ) {
             <div style="margin-bottom: 15px;">
                 <label for="vf_confirm_email">Confirm Email <span style="color:red;">*</span></label><br>
                 <input type="email" id="vf_confirm_email" name="confirm_email" style="width: 100%; padding: 12px;" required>
+            </div>
+
+            <!-- Newsletter Signup Section (Moved here) -->
+            <div style="margin-bottom: 25px; padding-top: 15px; border-top: 1px solid #eee;">
+                <h3>Please check this box if you want the newsletter</h3>
+                <p style="font-size: 0.9em; color: #555; margin-top: 5px;">If you only want the newsletter you may leave the rest of the form blank.</p>
+                <label style="font-weight: bold; font-size: 1.1em;">
+                    <input type="checkbox" name="newsletter" value="yes" style="width: auto; height: 1.1em; vertical-align: middle; margin-right: 8px;">Sign me up to the newsletter
+                </label>
             </div>
 
             <!-- Areas of Interest -->
@@ -161,6 +163,8 @@ if ( ! function_exists('volunteer_form_handler') ) {
                 <button type="submit" name="submit_volunteer_form" class="custom-form-submit-button">Submit</button>
             </div>
         </form>
+
+
         <?php return ob_get_clean();
     }
     add_shortcode('volunteer_form', 'volunteer_form_handler');
