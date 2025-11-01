@@ -35,7 +35,7 @@ if ( ! function_exists('volunteer_form_handler') ) {
             $email = sanitize_email($_POST['email_address']);
             if (is_email_blacklisted($email)) { return '<p style="color: green;">Thank you! Your submission has been received.</p>'; }
             $first_name = sanitize_text_field($_POST['first_name']); $last_name = sanitize_text_field($_POST['last_name']); $confirm_email = sanitize_email($_POST['confirm_email']);
-            $message = sanitize_textarea_field($_POST['user_message']); $phone_check = validate_and_format_phone_number($_POST['phone_number']); $newsletter = isset($_POST['newsletter']) ? 'Yes' : 'No';
+            $message = sanitize_textarea_field($_POST['user_message']); $phone_check = validate_and_format_phone_number($_POST['phone_number']); $newsletter_signup = isset($_POST['newsletter']);
             $interests = []; if ( isset($_POST['interests']) && is_array($_POST['interests']) ) { foreach ($_POST['interests'] as $interest) { $interests[] = sanitize_text_field($interest); } }
             $interests_string = implode(', ', $interests);
             if ( empty($first_name) || empty($last_name) || empty($email) || empty($_POST['phone_number']) ) { $status_message = '<p style="color: red;">Error: Please fill in all required fields.</p>'; } 
@@ -43,12 +43,30 @@ if ( ! function_exists('volunteer_form_handler') ) {
             elseif ( $email !== $confirm_email ) { $status_message = '<p style="color: red;">Error: The email addresses do not match.</p>'; } 
             elseif ( !is_email($email) ) { $status_message = '<p style="color: red;">Error: Please enter a valid email address.</p>'; } 
             else {
-                $full_name = $first_name . " " . $last_name; $routing_options = get_option('my_form_email_routing', []); $recipients = $routing_options['volunteer'] ?? '';
-                $admin_email_data = [ 'full_name' => $full_name, 'email' => $email, 'phone' => $phone_check['formatted'], 'form_source' => 'Volunteer Form', 'custom_fields' => [ ['label' => 'Newsletter Signup', 'value' => $newsletter] ], 'message' => $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string ];
-                $pods_message = $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string . "\n\nSign up for newsletter: " . $newsletter;
+                $full_name = $first_name . " " . $last_name;
+                $routing_options = get_option('my_form_email_routing', []);
+                $volunteer_recipient = $routing_options['volunteer'] ?? '';
+                $newsletter_recipient = $routing_options['newsletter'] ?? '';
+
+                $is_volunteer_application = !empty($interests);
+                
+                $recipients_array = [];
+                if ($is_volunteer_application) {
+                    $recipients_array[] = $volunteer_recipient;
+                }
+                if ($newsletter_signup) {
+                    $recipients_array[] = $newsletter_recipient;
+                }
+                if (empty($recipients_array)) {
+                    $recipients_array[] = $volunteer_recipient;
+                }
+                $final_recipients = implode(',', array_filter(array_unique($recipients_array)));
+                
+                $admin_email_data = [ 'full_name' => $full_name, 'email' => $email, 'phone' => $phone_check['formatted'], 'form_source' => 'Volunteer Form', 'custom_fields' => [ ['label' => 'Newsletter Signup', 'value' => ($newsletter_signup ? 'Yes' : 'No')] ], 'message' => $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string ];
+                $pods_message = $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string . "\n\nSign up for newsletter: " . ($newsletter_signup ? 'Yes' : 'No');
                 log_form_submission_to_pods(['messenger_name' => $full_name, 'phone' => $phone_check['formatted'], 'email' => $email, 'message' => $pods_message, 'form_source' => 'Volunteer Form']);
-                send_formatted_admin_email($recipients, 'New Volunteer Submission from ' . $full_name, $admin_email_data);
-                $user_copy = "Name: $full_name\nEmail: $email\nPhone: {$phone_check['formatted']}\n\nMessage:\n$message\n\nAreas of Interest:\n$interests_string\nNewsletter Signup: $newsletter";
+                send_formatted_admin_email($final_recipients, 'New Volunteer Submission from ' . $full_name, $admin_email_data);
+                $user_copy = "Name: $full_name\nEmail: $email\nPhone: {$phone_check['formatted']}\n\nMessage:\n$message\n\nAreas of Interest:\n$interests_string\nNewsletter Signup: " . ($newsletter_signup ? 'Yes' : 'No');
                 send_user_confirmation_email($email, $first_name, 'Volunteer Form', $user_copy);
                 $status_message = '<p style="color: green;">Thank you! Your application has been received. A confirmation has been sent to your email.</p>';
             }
