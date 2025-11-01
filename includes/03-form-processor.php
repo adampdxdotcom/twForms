@@ -72,8 +72,95 @@ if ( ! function_exists('volunteer_form_handler') ) {
             }
         }
         ob_start(); ?>
-        <div id="volunteer-form-status" class="form-status-message"><?php echo $debug_message . $status_message; ?></div>
-        <form method="post" action="" id="volunteer-form"><div style="position: absolute; left: -5000px;" aria-hidden="true"><label for="vf_nickname">Do not fill this out</label><input type="text" id="vf_nickname" name="vf_user_nickname" tabindex="-1" autocomplete="off"></div><input type="hidden" name="form_timestamp" value="<?php echo base64_encode(time()); ?>"><?php wp_nonce_field( 'process_volunteer_form', 'volunteer_form_nonce' ); ?><div style="display: flex; gap: 25px; margin-bottom: 15px;"><div style="flex: 1;"><label for="vf_first_name">First Name <span style="color:red;">*</span></label><br><input type="text" id="vf_first_name" name="first_name" style="width: 100%; padding: 12px;" required></div><div style="flex: 1;"><label for="vf_last_name">Last Name <span style="color:red;">*</span></label><br><input type="text" id="vf_last_name" name="last_name" style="width: 100%; padding: 12px;" required></div></div><div style="margin-bottom: 15px;"><label for="vf_phone">Phone Number <span style="color:red;">*</span></label><br><input type="tel" id="vf_phone" name="phone_number" style="width: 100%; padding: 12px;" required></div><div style="margin-bottom: 15px;"><label for="vf_email">Email <span style="color:red;">*</span></label><br><input type="email" id="vf_email" name="email_address" style="width: 100%; padding: 12px;" required></div><div style="margin-bottom: 15px;"><label for="vf_confirm_email">Confirm Email <span style="color:red;">*</span></label><br><input type="email" id="vf_confirm_email" name="confirm_email" style="width: 100%; padding: 12px;" required></div><div style="margin-bottom: 15px;"><label><strong>Areas of interest</strong></label><br><div style="columns: 2; -webkit-columns: 2; -moz-columns: 2;"><label><input type="checkbox" name="interests[]" value="Acting"> Acting</label><br><label><input type="checkbox" name="interests[]" value="Directing"> Directing</label><br><label><input type="checkbox" name="interests[]" value="Back Stage"> Back Stage</label><br><label><input type="checkbox" name="interests[]" value="Music"> Music</label><br><label><input type="checkbox" name="interests[]" value="Lights/Sound"> Lights/Sound</label><br><label><input type="checkbox" name="interests[]" value="Set Design/Construction"> Set Design/Construction</label><br><label><input type="checkbox" name="interests[]" value="Costumes"> Costumes</label><br><label><input type="checkbox" name="interests[]" value="Publicity"> Publicity</label><br><label><input type="checkbox" name="interests[]" value="Administrative"> Administrative</label><br><label><input type="checkbox" name="interests[]" value="Box Office"> Box Office</label><br><label><input type="checkbox" name="interests[]" value="Ushering"> Ushering</label><br><label><input type="checkbox" name="interests[]" value="Fundraising/Grant Writing"> Fundraising/Grant Writing</label><br><label><input type="checkbox" name="interests[]" value="Makeup Artist"> Makeup Artist</label><br><label><input type="checkbox" name="interests[]" value="General Handyperson"> General Handyperson</label><br><label><input type="checkbox" name="interests[]" value="House Manager"> House Manager</label><br><label><input type="checkbox" name="interests[]" value="Volunteer Coordinator"> Volunteer Coordinator</label><br></div></div><div style="margin-bottom: 20px;"><label><input type="checkbox" name="newsletter" value="yes"> Please sign me up to the newsletter.</label></div><div style="margin-bottom: 15px;"><label for="vf_user_message">Message (Optional)</label><br><textarea id="vf_user_message" name="user_message" rows="5" style="width: 100%; padding: 12px;"></textarea></div><div style="margin-top: 25px; text-align: center;"><button type="submit" name="submit_volunteer_form" class="custom-form-submit-button">Submit</button></div></form>
+<div id="volunteer-form-status" class="form-status-message">
+            <?php echo $debug_message . $status_message; ?>
+        </div>
+        
+        <form method="post" action="" id="volunteer-form">
+            <!-- Honeypot field for spam prevention -->
+            <div style="position: absolute; left: -5000px;" aria-hidden="true">
+                <label for="vf_nickname">Do not fill this out</label>
+                <input type="text" id="vf_nickname" name="vf_user_nickname" tabindex="-1" autocomplete="off">
+            </div>
+
+            <!-- Hidden timestamp for spam prevention -->
+            <input type="hidden" name="form_timestamp" value="<?php echo base64_encode(time()); ?>">
+
+            <?php wp_nonce_field( 'process_volunteer_form', 'volunteer_form_nonce' ); ?>
+
+            <!-- Newsletter Signup Section (Moved to top) -->
+            <div style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
+                <h2>Please check this box if you want the newsletter</h2>
+                <p style="font-size: 0.9em; color: #555; margin-top: 5px;">If you only want the newsletter you may leave the rest of the form blank.</p>
+                <label style="font-weight: bold; font-size: 1.1em;">
+                    <input type="checkbox" name="newsletter" value="yes" style="width: auto; height: 1.1em; vertical-align: middle; margin-right: 8px;">Sign me up to the newsletter
+                </label>
+            </div>
+
+            <!-- Name Fields -->
+            <div style="display: flex; gap: 25px; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <label for="vf_first_name">First Name <span style="color:red;">*</span></label><br>
+                    <input type="text" id="vf_first_name" name="first_name" style="width: 100%; padding: 12px;" required>
+                </div>
+                <div style="flex: 1;">
+                    <label for="vf_last_name">Last Name <span style="color:red;">*</span></label><br>
+                    <input type="text" id="vf_last_name" name="last_name" style="width: 100%; padding: 12px;" required>
+                </div>
+            </div>
+
+            <!-- Phone Number -->
+            <div style="margin-bottom: 15px;">
+                <label for="vf_phone">Phone Number <span style="color:red;">*</span></label><br>
+                <input type="tel" id="vf_phone" name="phone_number" style="width: 100%; padding: 12px;" required>
+            </div>
+
+            <!-- Email -->
+            <div style="margin-bottom: 15px;">
+                <label for="vf_email">Email <span style="color:red;">*</span></label><br>
+                <input type="email" id="vf_email" name="email_address" style="width: 100%; padding: 12px;" required>
+            </div>
+
+            <!-- Confirm Email -->
+            <div style="margin-bottom: 15px;">
+                <label for="vf_confirm_email">Confirm Email <span style="color:red;">*</span></label><br>
+                <input type="email" id="vf_confirm_email" name="confirm_email" style="width: 100%; padding: 12px;" required>
+            </div>
+
+            <!-- Areas of Interest -->
+            <div style="margin-bottom: 15px;">
+                <label><strong>Areas of interest</strong></label><br>
+                <div style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
+                    <label><input type="checkbox" name="interests[]" value="Acting"> Acting</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Directing"> Directing</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Back Stage"> Back Stage</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Music"> Music</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Lights/Sound"> Lights/Sound</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Set Design/Construction"> Set Design/Construction</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Costumes"> Costumes</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Publicity"> Publicity</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Administrative"> Administrative</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Box Office"> Box Office</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Ushering"> Ushering</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Fundraising/Grant Writing"> Fundraising/Grant Writing</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Makeup Artist"> Makeup Artist</label><br>
+                    <label><input type="checkbox" name="interests[]" value="General Handyperson"> General Handyperson</label><br>
+                    <label><input type="checkbox" name="interests[]" value="House Manager"> House Manager</label><br>
+                    <label><input type="checkbox" name="interests[]" value="Volunteer Coordinator"> Volunteer Coordinator</label><br>
+                </div>
+            </div>
+
+            <!-- Message -->
+            <div style="margin-bottom: 15px;">
+                <label for="vf_user_message">Message (Optional)</label><br>
+                <textarea id="vf_user_message" name="user_message" rows="5" style="width: 100%; padding: 12px;"></textarea>
+            </div>
+            
+            <!-- Submit Button -->
+            <div style="margin-top: 25px; text-align: center;">
+                <button type="submit" name="submit_volunteer_form" class="custom-form-submit-button">Submit</button>
+            </div>
+        </form>
         <?php return ob_get_clean();
     }
     add_shortcode('volunteer_form', 'volunteer_form_handler');
