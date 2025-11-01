@@ -48,33 +48,44 @@ if ( ! function_exists('volunteer_form_handler') ) {
                 $volunteer_recipient = $routing_options['volunteer'] ?? '';
                 $newsletter_recipient = $routing_options['newsletter'] ?? '';
 
+                // Base data for placeholders
+                $base_form_data = [
+                    'full_name'   => $full_name,
+                    'email'       => $email,
+                    'phone'       => $phone_check['formatted'],
+                    'form_source' => 'Volunteer Form'
+                ];
+
                 $is_volunteer_application = !empty($interests);
-                
-                $recipients_array = [];
+
+                // --- Send Admin Notifications based on logic ---
+
+                // 1. Send to Volunteer Coordinator if it's an application
                 if ($is_volunteer_application) {
-                    $recipients_array[] = $volunteer_recipient;
+                    $volunteer_data_string = "Areas of Interest: " . $interests_string . "\n";
+                    $volunteer_data_string .= "Newsletter Signup: " . ($newsletter_signup ? 'Yes' : 'No') . "\n\n";
+                    $volunteer_data_string .= "Message:\n" . $message;
+                    send_custom_admin_notification($volunteer_recipient, 'volunteer', $base_form_data, $volunteer_data_string);
                 }
+
+                // 2. Send to Newsletter Manager if they signed up
                 if ($newsletter_signup) {
-                    $recipients_array[] = $newsletter_recipient;
+                    // For the newsletter, submitted_data is simple as the template handles the info
+                    send_custom_admin_notification($newsletter_recipient, 'newsletter', $base_form_data, '');
                 }
-                if (empty($recipients_array)) {
-                    $recipients_array[] = $volunteer_recipient;
-                }
-                $final_recipients = implode(',', array_filter(array_unique($recipients_array)));
                 
-                $admin_email_data = [ 'full_name' => $full_name, 'email' => $email, 'phone' => $phone_check['formatted'], 'form_source' => 'Volunteer Form', 'custom_fields' => [ ['label' => 'Newsletter Signup', 'value' => ($newsletter_signup ? 'Yes' : 'No')] ], 'message' => $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string ];
+                // --- Log submission to Pods and send user confirmation ---
                 $pods_message = $message . "\n\n---\n\nAREAS OF INTEREST:\n" . $interests_string . "\n\nSign up for newsletter: " . ($newsletter_signup ? 'Yes' : 'No');
                 log_form_submission_to_pods(['messenger_name' => $full_name, 'phone' => $phone_check['formatted'], 'email' => $email, 'message' => $pods_message, 'form_source' => 'Volunteer Form']);
-                send_formatted_admin_email($final_recipients, 'New Volunteer Submission from ' . $full_name, $admin_email_data);
+                
                 $user_copy = "Name: $full_name\nEmail: $email\nPhone: {$phone_check['formatted']}\n\nMessage:\n$message\n\nAreas of Interest:\n$interests_string\nNewsletter Signup: " . ($newsletter_signup ? 'Yes' : 'No');
                 send_user_confirmation_email($email, $first_name, 'Volunteer Form', $user_copy);
+                
                 $status_message = '<p style="color: green;">Thank you! Your application has been received. A confirmation has been sent to your email.</p>';
             }
         }
         ob_start(); ?>
-
-
-<div id="volunteer-form-status" class="form-status-message">
+        <div id="volunteer-form-status" class="form-status-message">
             <?php echo $debug_message . $status_message; ?>
         </div>
         
@@ -120,7 +131,7 @@ if ( ! function_exists('volunteer_form_handler') ) {
                 <input type="email" id="vf_confirm_email" name="confirm_email" style="width: 100%; padding: 12px;" required>
             </div>
 
-            <!-- Newsletter Signup Section (Moved here) -->
+            <!-- Newsletter Signup Section -->
             <div style="margin-bottom: 25px; padding-top: 15px; border-top: 1px solid #eee;">
                 <h3>Please check this box if you want the newsletter</h3>
                 <p style="font-size: 0.9em; color: #555; margin-top: 5px;">If you only want the newsletter you may leave the rest of the form blank.</p>
@@ -163,8 +174,6 @@ if ( ! function_exists('volunteer_form_handler') ) {
                 <button type="submit" name="submit_volunteer_form" class="custom-form-submit-button">Submit</button>
             </div>
         </form>
-
-
         <?php return ob_get_clean();
     }
     add_shortcode('volunteer_form', 'volunteer_form_handler');
@@ -189,11 +198,22 @@ if ( ! function_exists('membership_form_handler') ) {
             elseif ( $email !== $confirm_email ) { $status_message = '<p style="color: red;">Error: The email addresses do not match.</p>'; } 
             elseif ( !is_email($email) ) { $status_message = '<p style="color: red;">Error: Please enter a valid email address.</p>'; } 
             else {
-                $full_name = $first_name . " " . $last_name; $routing_options = get_option('my_form_email_routing', []); $recipients = $routing_options['membership'] ?? '';
-                $admin_email_data = [ 'full_name' => $full_name, 'email' => $email, 'phone' => $phone_check['formatted'], 'form_source' => 'Membership Form', 'custom_fields' => [ ['label' => 'Organization', 'value' => $organization] ], 'message' => $message ];
+                $full_name = $first_name . " " . $last_name; 
+                $routing_options = get_option('my_form_email_routing', []); 
+                $recipients = $routing_options['membership'] ?? '';
+                
+                $base_form_data = [
+                    'full_name'   => $full_name,
+                    'email'       => $email,
+                    'phone'       => $phone_check['formatted'],
+                    'form_source' => 'Membership Form'
+                ];
+                $submitted_data_string = "Organization: " . $organization . "\n\nMessage:\n" . $message;
+                send_custom_admin_notification($recipients, 'membership', $base_form_data, $submitted_data_string);
+
                 $pods_message = 'Organization: ' . $organization . "\n\n---\n\n" . $message;
                 log_form_submission_to_pods(['messenger_name' => $full_name, 'phone' => $phone_check['formatted'], 'email' => $email, 'message' => $pods_message, 'form_source' => 'Membership Form']);
-                send_formatted_admin_email($recipients, 'New Membership Submission from ' . $full_name, $admin_email_data);
+                
                 $user_copy = "Name: $full_name\nEmail: $email\nPhone: {$phone_check['formatted']}\nOrganization: $organization\n\nMessage:\n$message";
                 send_user_confirmation_email($email, $first_name, 'Membership Form', $user_copy);
                 $status_message = '<p style="color: green;">Thank you! Your application has been received. A confirmation has been sent to your email.</p>';
@@ -226,10 +246,20 @@ if ( ! function_exists('contact_form_handler') ) {
             elseif ( $email !== $confirm_email ) { $status_message = '<p style="color: red;">Error: The email addresses do not match.</p>'; } 
             elseif ( !is_email($email) ) { $status_message = '<p style="color: red;">Error: Please enter a valid email address.</p>'; } 
             else {
-                $full_name = $first_name . " " . $last_name; $routing_options = get_option('my_form_email_routing', []); $recipients = $routing_options['contact'] ?? '';
-                $admin_email_data = [ 'full_name' => $full_name, 'email' => $email, 'phone' => $phone_check['formatted'], 'form_source' => 'Contact Form', 'custom_fields' => [], 'message' => $message ];
+                $full_name = $first_name . " " . $last_name; 
+                $routing_options = get_option('my_form_email_routing', []); 
+                $recipients = $routing_options['contact'] ?? '';
+                
+                $base_form_data = [
+                    'full_name'   => $full_name,
+                    'email'       => $email,
+                    'phone'       => $phone_check['formatted'],
+                    'form_source' => 'Contact Form'
+                ];
+                send_custom_admin_notification($recipients, 'contact', $base_form_data, $message);
+                
                 log_form_submission_to_pods(['messenger_name' => $full_name, 'phone' => $phone_check['formatted'], 'email' => $email, 'message' => $message, 'form_source' => 'Contact Form']);
-                send_formatted_admin_email($recipients, 'New Contact Form Submission from ' . $full_name, $admin_email_data);
+                
                 $user_copy = "Name: $full_name\nEmail: $email\nPhone: {$phone_check['formatted']}\n\nMessage:\n$message";
                 send_user_confirmation_email($email, $first_name, 'Contact Form', $user_copy);
                 $status_message = '<p style="color: green;">Thank you! Your message has been received. A confirmation has been sent to your email.</p>';
