@@ -68,14 +68,55 @@ if ( ! function_exists('validate_and_format_phone_number') ) {
     }
 }
 
-if (!function_exists('send_formatted_admin_email')) {
-    function send_formatted_admin_email($to, $subject, $data) {
-        if (empty($to)) { return true; }
-        $headers = ['Content-Type: text/html; charset=UTF-8', 'Reply-To: ' . $data['full_name'] . ' <' . $data['email'] . '>'];
-        ob_start(); ?>
-        <div style="font-family: sans-serif; font-size: 14px; color: #333; line-height: 1.6;"><h2 style="color: #ba0000;">New Submission: <?php echo esc_html($data['form_source']); ?></h2><table cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;"><tr style="background-color: #f7f7f7;"><td style="width: 120px;"><strong>Name:</strong></td><td><?php echo esc_html($data['full_name']); ?></td></tr><tr><td><strong>Email:</strong></td><td><a href="mailto:<?php echo esc_attr($data['email']); ?>"><?php echo esc_html($data['email']); ?></a></td></tr><tr style="background-color: #f7f7f7;"><td><strong>Phone:</strong></td><td><?php echo esc_html($data['phone']); ?></td></tr><?php if (isset($data['custom_fields'])) { foreach($data['custom_fields'] as $field): ?><tr><td><strong><?php echo esc_html($field['label']); ?>:</strong></td><td><?php echo esc_html($field['value']); ?></td></tr><?php endforeach; } ?></table><h3 style="margin-top: 20px; color: #333;">Message</h3><div style="padding: 15px; background-color: #fdfdfd; border: 1px solid #eee;"><?php echo nl2br(esc_html($data['message'])); ?></div></div>
-        <?php $body = ob_get_clean();
-        return wp_mail($to, $subject, $body, $headers);
+if (!function_exists('send_custom_admin_notification')) {
+    function send_custom_admin_notification($to, $template_key, $form_data, $submitted_data_string) {
+        if (empty($to)) {
+            return true; // Don't try to send if no recipient is set
+        }
+
+        // Fetch all admin templates from the database
+        $admin_templates = get_option('my_admin_email_templates', []);
+
+        // Define default subjects and bodies as fallbacks
+        $defaults = [
+            'volunteer_subject' => 'New Volunteer Submission from {user_name}',
+            'volunteer_body' => "You have received a new volunteer submission.\n\nFrom: {user_name}\nEmail: {user_email}\nPhone: {user_phone}\n\n--- Details ---\n{submitted_data}",
+            'newsletter_subject' => 'New Newsletter Signup: {user_email}',
+            'newsletter_body' => "A new user has signed up for the newsletter.\n\nName: {user_name}\nEmail: {user_email}",
+            'membership_subject' => 'New Membership Submission from {user_name}',
+            'membership_body' => "You have received a new membership submission.\n\nFrom: {user_name}\nEmail: {user_email}\nPhone: {user_phone}\n\n--- Details ---\n{submitted_data}",
+            'contact_subject' => 'New Contact Submission from {user_name}',
+            'contact_body' => "You have received a new contact submission.\n\nFrom: {user_name}\nEmail: {user_email}\nPhone: {user_phone}\n\n--- Message ---\n{submitted_data}",
+        ];
+
+        // Get the specific subject and body for our template key, or use the default
+        $subject_template = $admin_templates[$template_key . '_subject'] ?? $defaults[$template_key . '_subject'];
+        $body_template = $admin_templates[$template_key . '_body'] ?? $defaults[$template_key . '_body'];
+
+        // Prepare the placeholder replacements
+        $replacements = [
+            '{user_name}'      => $form_data['full_name'],
+            '{user_email}'     => $form_data['email'],
+            '{user_phone}'     => $form_data['phone'],
+            '{form_source}'    => $form_data['form_source'],
+            '{submitted_data}' => $submitted_data_string,
+        ];
+        
+        // Replace placeholders in subject and body
+        $final_subject = str_replace(array_keys($replacements), array_values($replacements), $subject_template);
+        $final_body = str_replace(array_keys($replacements), array_values($replacements), $body_template);
+
+        // Prepare headers
+        $headers = [
+            'Content-Type: text/html; charset=UTF-8',
+            'Reply-To: ' . $form_data['full_name'] . ' <' . $form_data['email'] . '>',
+        ];
+
+        // Format body for HTML email
+        $html_body = '<div style="font-family: sans-serif; font-size: 14px; color: #333; line-height: 1.6;">' . nl2br(esc_html($final_body)) . '</div>';
+        
+        // Send the email
+        return wp_mail($to, $final_subject, $html_body, $headers);
     }
 }
 
