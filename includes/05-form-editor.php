@@ -4,7 +4,7 @@
  * Adds new field types for Section Header and HTML Block.
  *
  * @package TW_Forms
- * @version 2.2.0
+ * @version 2.2.1
  */
 
 // If this file is called directly, abort.
@@ -40,7 +40,6 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                     <p class="empty-state">No rows yet. Click "Add Row" to begin building your form.</p>
                 <?php endif; ?>
             </div>
-            <!-- MOVED: Add Row controls are now at the bottom -->
             <div class="builder-actions">
                 <div class="add-row-container">
                     <span>Add New Row with Layout:</span>
@@ -114,38 +113,28 @@ if ( ! function_exists( 'tw_forms_render_field_partial' ) ) {
         $needs_confirm = ! empty( $field['confirm'] ); $checkbox_options = esc_textarea( $field['options'] ?? '' ); $checkbox_cols = esc_attr( $field['cols'] ?? '1' );
         $html_content = $field['html_content'] ?? '';
         $name_base = "tw_form_fields[{$row_index}][columns][{$col_index}][{$field_index}]";
+        $disabled = $is_template ? 'disabled' : '';
         ?>
         <div class="form-field-block" <?php if($is_template) echo 'id="template-field"'; ?>>
             <div class="field-header"><span class="field-type-label"><?php echo esc_html( ucfirst( str_replace('_', ' ', $field_type) ) ); ?></span><div class="field-actions"><a href="#" class="move-field" title="Drag to reorder">☰</a><a href="#" class="delete-field" title="Delete this field">×</a></div></div>
             <div class="field-settings">
                 <div class="setting-row">
                     <label>Field Type</label>
-                    <select name="<?php echo $name_base; ?>[type]" class="field-type-select" <?php if($is_template) echo 'disabled'; ?>>
-                        <optgroup label="Input Fields">
-                            <option value="text" <?php selected( $field_type, 'text' ); ?>>Text Input</option>
-                            <option value="email" <?php selected( $field_type, 'email' ); ?>>Email Address</option>
-                            <option value="tel" <?php selected( $field_type, 'tel' ); ?>>Phone Number</option>
-                            <option value="textarea" <?php selected( $field_type, 'textarea' ); ?>>Text Area</option>
-                            <option value="checkbox_group" <?php selected( $field_type, 'checkbox_group' ); ?>>Checkbox Group</option>
-                        </optgroup>
-                        <optgroup label="Structural Elements">
-                            <option value="section_header" <?php selected( $field_type, 'section_header' ); ?>>Section Header</option>
-                            <option value="html_block" <?php selected( $field_type, 'html_block' ); ?>>HTML Block</option>
-                        </optgroup>
-                        <optgroup label="Actions">
-                            <option value="submit" <?php selected( $field_type, 'submit' ); ?>>Submit Button</option>
-                        </optgroup>
+                    <select name="<?php echo $name_base; ?>[type]" class="field-type-select" <?php echo $disabled; ?>>
+                        <optgroup label="Input Fields"><option value="text" <?php selected( $field_type, 'text' ); ?>>Text Input</option><option value="email" <?php selected( $field_type, 'email' ); ?>>Email Address</option><option value="tel" <?php selected( $field_type, 'tel' ); ?>>Phone Number</option><option value="textarea" <?php selected( $field_type, 'textarea' ); ?>>Text Area</option><option value="checkbox_group" <?php selected( $field_type, 'checkbox_group' ); ?>>Checkbox Group</option></optgroup>
+                        <optgroup label="Structural Elements"><option value="section_header" <?php selected( $field_type, 'section_header' ); ?>>Section Header</option><option value="html_block" <?php selected( $field_type, 'html_block' ); ?>>HTML Block</option></optgroup>
+                        <optgroup label="Actions"><option value="submit" <?php selected( $field_type, 'submit' ); ?>>Submit Button</option></optgroup>
                     </select>
                 </div>
-                <div class="setting-row field-label-panel"><label>Field Label / Header Text</label><input type="text" name="<?php echo $name_base; ?>[label]" value="<?php echo $field_label; ?>" placeholder="e.g., Your Full Name" <?php if($is_template) echo 'disabled'; ?>></div>
-                <div class="setting-row html-content-panel"><label>Content (HTML allowed)</label><textarea name="<?php echo $name_base; ?>[html_content]" rows="5" placeholder="Enter your text or HTML here..." <?php if($is_template) echo 'disabled'; ?>><?php echo esc_textarea($html_content); ?></textarea></div>
+                <div class="setting-row field-label-panel"><label>Field Label / Header Text</label><input type="text" name="<?php echo $name_base; ?>[label]" value="<?php echo $field_label; ?>" placeholder="e.g., Your Full Name" <?php echo $disabled; ?>></div>
+                <div class="setting-row html-content-panel"><label>Content (HTML allowed)</label><textarea name="<?php echo $name_base; ?>[html_content]" rows="5" placeholder="Enter your text or HTML here..." <?php echo $disabled; ?>><?php echo esc_textarea($html_content); ?></textarea></div>
                 <div class="setting-row setting-row-options">
-                    <label><input type="checkbox" name="<?php echo $name_base; ?>[required]" value="1" <?php checked( $is_required ); ?> <?php if($is_template) echo 'disabled'; ?>> Required?</label>
-                    <label class="confirm-email-option"><input type="checkbox" name="<?php echo $name_base; ?>[confirm]" value="1" <?php checked( $needs_confirm ); ?> <?php if($is_template) echo 'disabled'; ?>> Confirm?</label>
+                    <label><input type="checkbox" name="<?php echo $name_base; ?>[required]" value="1" <?php checked( $is_required ); ?> <?php echo $disabled; ?>> Required?</label>
+                    <label class="confirm-email-option"><input type="checkbox" name="<?php echo $name_base; ?>[confirm]" value="1" <?php checked( $needs_confirm ); ?> <?php echo $disabled; ?>> Confirm?</label>
                 </div>
                 <div class="checkbox-options-panel">
-                    <div class="setting-row"><label>Checkbox Options (one per line)</label><textarea name="<?php echo $name_base; ?>[options]" rows="4" <?php if($is_template) echo 'disabled'; ?>><?php echo $checkbox_options; ?></textarea></div>
-                    <div class="setting-row"><label>Display in Columns</label><select name="<?php echo $name_base; ?>[cols]" <?php if($is_template) echo 'disabled'; ?>><option value="1" <?php selected($checkbox_cols, '1'); ?>>1 Column</option><option value="2" <?php selected($checkbox_cols, '2'); ?>>2 Columns</option><option value="3" <?php selected($checkbox_cols, '3'); ?>>3 Columns</option></select></div>
+                    <div class="setting-row"><label>Checkbox Options (one per line)</label><textarea name="<?php echo $name_base; ?>[options]" rows="4" <?php echo $disabled; ?>><?php echo $checkbox_options; ?></textarea></div>
+                    <div class="setting-row"><label>Display in Columns</label><select name="<?php echo $name_base; ?>[cols]" <?php echo $disabled; ?>><option value="1" <?php selected($checkbox_cols, '1'); ?>>1 Column</option><option value="2" <?php selected($checkbox_cols, '2'); ?>>2 Columns</option><option value="3" <?php selected($checkbox_cols, '3'); ?>>3 Columns</option></select></div>
                 </div>
             </div>
         </div>
@@ -269,10 +258,12 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                 layoutContainer.on('click', '.add-field-to-col', function() {
                     const column = $(this).closest('.column-block');
                     const newField = templates.find('#template-field').clone().removeAttr('id');
-                    newField.find('[name*="__INDEX__"]').each(function() { $(this).prop('disabled', false); });
+                    
+                    // THIS IS THE FIX: Enable the fields in the new clone
+                    newField.find('[disabled]').prop('disabled', false);
+                    
                     newField.insertBefore($(this));
                     reindexNames();
-                    // Manually trigger change to set initial visibility of panels
                     newField.find('.field-type-select').trigger('change');
                 });
 
@@ -296,7 +287,6 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                 });
                 
                 initSortables();
-                // Trigger change on all existing fields on page load to set correct visibility
                 layoutContainer.find('.field-type-select').trigger('change');
             });
         </script>
