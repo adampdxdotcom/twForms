@@ -242,60 +242,7 @@ if ( ! function_exists('enqueue_form_spam_protection_scripts') ) {
     }
 }
 
-if ( ! function_exists('add_recaptcha_form_submission_script') ) {
-    function add_recaptcha_form_submission_script() {
-        $recaptcha_options = get_option('my_recaptcha_settings', []);
-        if (!empty($recaptcha_options['disable'])) return;
-        $site_key = $recaptcha_options['site_key'] ?? ''; if (empty($site_key)) return;
-        ?>
-        <script type="text/javascript">
-            document.addEventListener('DOMContentLoaded', function () {
-                const forms = document.querySelectorAll('form.tw-form');
-                if (!forms.length) return;
 
-                forms.forEach(function(form) {
-                    const button = form.querySelector('button[name="submit_tw_form"]');
-                    if (!button) return;
-
-                    button.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const thisButton = this;
-                        const originalButtonText = thisButton.textContent;
-                        const statusDiv = form.querySelector('.form-status-message');
-
-                        thisButton.disabled = true;
-                        thisButton.textContent = 'Verifying...';
-                        
-                        if (typeof grecaptcha === 'undefined' || typeof grecaptcha.execute === 'undefined') {
-                            if (statusDiv) statusDiv.innerHTML = '<p style="color: red;">Spam protection failed to load. Please disable ad blockers and reload.</p>';
-                            thisButton.disabled = false; thisButton.textContent = originalButtonText; return;
-                        }
-
-                        grecaptcha.ready(function () {
-                            grecaptcha.execute('<?php echo esc_js($site_key); ?>', { action: 'form_submit' }).then(function (token) {
-                                let tokenInput = form.querySelector('input[name="recaptcha_token"]');
-                                if (!tokenInput) {
-                                    tokenInput = document.createElement('input');
-                                    tokenInput.type = 'hidden';
-                                    tokenInput.name = 'recaptcha_token';
-                                    form.appendChild(tokenInput);
-                                }
-                                tokenInput.value = token;
-                                form.submit();
-                            }).catch(function(error){
-                                if (statusDiv) statusDiv.innerHTML = '<p style="color: red;">Could not get spam protection token. Please try again.</p>';
-                                thisButton.disabled = false; thisButton.textContent = originalButtonText;
-                            });
-                        });
-                    });
-                });
-            });
-        </script>
-        <?php
-    }
-    add_action('wp_footer', 'add_recaptcha_form_submission_script');
-}
 
 if ( ! function_exists('custom_recaptcha_badge_styles') ) {
     function custom_recaptcha_badge_styles() {
