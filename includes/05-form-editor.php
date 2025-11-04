@@ -3,7 +3,7 @@
  * Creates the Meta Boxes for the Form Editor screen with a Row/Column Layout Builder.
  *
  * @package TW_Forms
- * @version 2.5.1
+ * @version 2.6.0
  */
 
 // If this file is called directly, abort.
@@ -116,21 +116,53 @@ if ( ! function_exists( 'tw_forms_render_field_partial' ) ) {
 
 if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
     function tw_forms_render_admin_notification_mb( $post ) {
+        // Main email settings
         $settings = get_post_meta( $post->ID, '_tw_form_admin_email', true );
         $settings = is_array( $settings ) ? $settings : [];
         $recipients_fallback = get_post_meta( $post->ID, '_tw_form_recipients', true ); // For backward compatibility
-
         $to       = $settings['to'] ?? $recipients_fallback;
         $subject  = $settings['subject'] ?? 'New Submission from [form_name]';
         $message  = $settings['message'] ?? '<p>A new entry has been submitted via the [form_name] form on your website.</p>[all_fields]';
+        
+        // Conditional notification rules
+        $rules = get_post_meta( $post->ID, '_tw_form_conditional_rules', true );
+        $rules = is_array($rules) ? $rules : [];
+
+        // Get all available fields from the form builder to use as triggers
+        $trigger_fields = [];
+        $saved_layout = get_post_meta( $post->ID, '_tw_form_layout', true );
+        if ( is_array( $saved_layout ) ) {
+            foreach ( $saved_layout as $row ) {
+                foreach ( $row['columns'] as $column ) {
+                    foreach ( $column as $field ) {
+                        if ( ! empty( $field['label'] ) && in_array( $field['type'], [ 'text', 'dropdown', 'radio_group', 'checkbox_group' ] ) ) {
+                            $trigger_fields[] = $field['label'];
+                        }
+                    }
+                }
+            }
+        }
         ?>
         <div class="tw-email-settings-wrapper">
             <div class="email-settings-main">
                 <div class="setting-row"><label for="admin-email-to"><strong>Send Notifications To</strong></label><input type="text" id="admin-email-to" name="tw_form_admin_email[to]" value="<?php echo esc_attr( $to ); ?>"><p class="description">Enter email addresses, comma-separated. If blank, defaults to the site admin email.</p></div>
                 <div class="setting-row"><label for="admin-email-subject"><strong>Subject</strong></label><input type="text" id="admin-email-subject" name="tw_form_admin_email[subject]" value="<?php echo esc_attr( $subject ); ?>"></div>
                 <div class="setting-row"><label for="admin-email-message"><strong>Message</strong></label>
-                    <?php wp_editor( $message, 'admin-email-message', ['textarea_name' => 'tw_form_admin_email[message]', 'media_buttons' => false, 'textarea_rows' => 10, 'tinymce' => [ 'toolbar1' => 'bold,italic,bullist,numlist,link,unlink,undo,redo' ]] ); ?>
+                    <?php wp_editor( $message, 'admin-email-message', ['textarea_name' => 'tw_form_admin_email[message]', 'media_buttons' => false, 'textarea_rows' => 8, 'tinymce' => [ 'toolbar1' => 'bold,italic,bullist,numlist,link,unlink,undo,redo' ]] ); ?>
                 </div>
+                
+                <hr>
+                
+                <h3>Conditional Notifications</h3>
+                <p class="description">Send additional, simple notifications to different people based on the user's input. For example, send a notice to the marketing team if a user checks "Sign up for newsletter".</p>
+                <div id="conditional-rules-container">
+                    <?php if ( ! empty( $rules ) ) : ?>
+                        <?php foreach ( $rules as $index => $rule ) : ?>
+                            <?php tw_forms_render_conditional_rule_partial( $index, $rule, $trigger_fields ); ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+                <button type="button" class="button" id="add-conditional-rule">+ Add Notification Rule</button>
             </div>
             <div class="email-settings-sidebar">
                 <p>This email is an alert that a new message is waiting in your site's inbox. All replies should be sent from the plugin's messaging system.</p>
@@ -138,6 +170,37 @@ if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
                 <strong>Available Tags</strong><p>Use these tags in your subject or message. They will be replaced with form data.</p>
                 <div class="tags-list"><code>[all_fields]</code> <code>[form_name]</code> <code>[page_url]</code> <code>[user_ip]</code> <code>[submission_date]</code> <code>[submission_time]</code><p>You can also use tags for any field by wrapping its label in brackets, e.g., <code>[Your Name]</code>.</p></div>
             </div>
+        </div>
+
+        <div id="conditional-rule-template" style="display: none;">
+             <?php tw_forms_render_conditional_rule_partial( '__INDEX__', [], $trigger_fields ); ?>
+        </div>
+        <?php
+    }
+}
+
+if ( ! function_exists( 'tw_forms_render_conditional_rule_partial' ) ) {
+    /**
+     * Renders the HTML for a single conditional rule row.
+     */
+    function tw_forms_render_conditional_rule_partial( $index, $rule_data, $fields ) {
+        $field     = $rule_data['field'] ?? '';
+        $value     = $rule_data['value'] ?? '';
+        $recipient = $rule_data['recipient'] ?? '';
+        ?>
+        <div class="conditional-rule-block">
+            <span>IF</span>
+            <select name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][field]">
+                <option value="">-- Select a Field --</option>
+                <?php foreach ( $fields as $field_label ) : ?>
+                    <option value="<?php echo esc_attr( $field_label ); ?>" <?php selected( $field, $field_label ); ?>><?php echo esc_html( $field_label ); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <span>IS</span>
+            <input type="text" name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][value]" value="<?php echo esc_attr( $value ); ?>" placeholder="e.g., Yes">
+            <span>THEN send to</span>
+            <input type="email" name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][recipient]" value="<?php echo esc_attr( $recipient ); ?>" placeholder="email@example.com">
+            <a href="#" class="remove-conditional-rule" title="Remove Rule">×</a>
         </div>
         <?php
     }
@@ -147,7 +210,6 @@ if ( ! function_exists( 'tw_forms_render_user_confirmation_mb' ) ) {
     function tw_forms_render_user_confirmation_mb( $post ) {
         $settings = get_post_meta( $post->ID, '_tw_form_user_email', true );
         $settings = is_array( $settings ) ? $settings : [];
-
         $enabled = ! empty( $settings['enabled'] );
         $subject = $settings['subject'] ?? 'Thank you for your submission';
         $message = $settings['message'] ?? '<p>Hi [Your Name],</p><p>Thank you for contacting us. We have received your message.</p><hr><p style="font-size: smaller; color: #777;">This is an automated message. Please do not reply to this email, as this inbox is not monitored.</p>';
@@ -223,9 +285,23 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
                 'message'    => wp_kses_post( $data['message'] ?? '' ),
             ];
             update_post_meta( $post_id, '_tw_form_admin_email', $sanitized_data );
-            // Delete the old meta key to avoid confusion
             delete_post_meta( $post_id, '_tw_form_recipients' );
         }
+
+        // --- Save Conditional Notification Rules ---
+        $sanitized_rules = [];
+        if ( isset( $_POST['tw_form_conditional_rules'] ) && is_array( $_POST['tw_form_conditional_rules'] ) ) {
+            foreach ( $_POST['tw_form_conditional_rules'] as $rule_data ) {
+                if ( ! empty( $rule_data['field'] ) && ! empty( $rule_data['recipient'] ) && is_email( $rule_data['recipient'] ) ) {
+                    $sanitized_rules[] = [
+                        'field'     => sanitize_text_field( $rule_data['field'] ),
+                        'value'     => sanitize_text_field( $rule_data['value'] ),
+                        'recipient' => sanitize_email( $rule_data['recipient'] ),
+                    ];
+                }
+            }
+        }
+        update_post_meta( $post_id, '_tw_form_conditional_rules', $sanitized_rules );
 
         // --- Save User Confirmation Email Settings ---
         if ( isset( $_POST['tw_form_user_email'] ) && is_array( $_POST['tw_form_user_email'] ) ) {
@@ -286,11 +362,29 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     fieldBlock.find('.field-label-panel').toggle(isInputField || selectedType === 'section_header' || selectedType === 'submit'); fieldBlock.find('.placeholder-panel').toggle(hasPlaceholder); fieldBlock.find('.html-content-panel').toggle(selectedType === 'html_block'); fieldBlock.find('.setting-row-options').toggle(isInputField); fieldBlock.find('.confirm-email-option').toggle(selectedType === 'email'); fieldBlock.find('.options-panel').toggle(hasOptions); fieldBlock.find('.multi-column-option').toggle(selectedType === 'checkbox_group' || selectedType === 'radio_group');
                 });
                 initSortables(); layoutContainer.find('.field-type-select').trigger('change');
+
+                // --- Conditional Notifications JS ---
+                const rulesContainer = $('#conditional-rules-container');
+                $('#add-conditional-rule').on('click', function(e) {
+                    e.preventDefault();
+                    const template = $('#conditional-rule-template').html();
+                    const newIndex = new Date().getTime();
+                    const newRule = template.replace(/__INDEX__/g, newIndex);
+                    rulesContainer.append(newRule);
+                });
+                rulesContainer.on('click', '.remove-conditional-rule', function(e) {
+                    e.preventDefault();
+                    if (confirm('Are you sure you want to remove this rule?')) {
+                        $(this).closest('.conditional-rule-block').remove();
+                    }
+                });
+
             });
         </script>
         <style>
             .tw-form-builder-wrapper { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; } #layout-container { border: 1px solid #ccd0d4; background: #fff; padding: 15px; min-height: 150px; } #layout-container .empty-state { color: #777; text-align: center; margin: 40px 0; font-size: 1.2em; } .builder-actions { margin-top: 15px; padding: 10px; background: #f9f9f9; border: 1px solid #ccd0d4; } .add-row-container { display: flex; align-items: center; gap: 10px; } .row-block { border: 1px solid #999; margin-bottom: 15px; background: #fdfdfd; } .row-header { display: flex; justify-content: space-between; align-items: center; background: #e0e0e0; padding: 5px 10px; cursor: move; border-bottom: 1px solid #ccc; } .row-header .row-label { font-weight: bold; } .row-columns { display: flex; gap: 10px; padding: 10px; } .column-block { flex: 1; border: 1px dashed #ccd0d4; background: #f9f9f9; min-height: 80px; padding: 10px; } .column-block[data-layout="50-50"] { flex-basis: 50%; } .column-block[data-layout="33-33-33"] { flex-basis: 33.33%; } .column-block[data-layout="25-25-25-25"] { flex-basis: 25%; } .column-block .add-field-to-col { width: 100%; margin-top: 5px; } .form-field-block { border: 1px solid #ccd0d4; margin-bottom: 10px; background: #fff; } .field-header { display: flex; justify-content: space-between; align-items: center; background: #f0f0f1; padding: 8px 12px; cursor: move; } .field-header .field-type-label { font-weight: 700; } .field-header .field-actions a { text-decoration: none; font-size: 1.4em; margin-left: 10px; } .field-settings { padding: 12px; } .field-settings .setting-row { margin-bottom: 10px; } .field-settings .setting-row-options label { display: inline-block; margin-right: 20px; } .field-settings label { display: block; margin-bottom: 5px; font-weight: 500; } .field-settings select, .field-settings input[type=text], .field-settings input[type=email], .field-settings textarea { width: 100%; } .row-placeholder, .field-placeholder{border:2px dashed #ccd0d4;background-color:#f0f8ff;margin-bottom:15px;box-sizing:border-box;}
             .tw-email-settings-wrapper { display: flex; gap: 20px; } .tw-email-settings-wrapper .email-settings-main { flex: 1; } .tw-email-settings-wrapper .email-settings-sidebar { flex-basis: 250px; background-color: #f8f9fa; border: 1px solid #ccd0d4; padding: 15px; } .tw-email-settings-wrapper .email-settings-sidebar strong { font-size: 1.1em; } .tw-email-settings-wrapper .email-settings-sidebar .tags-list { margin-top: 10px; } .tw-email-settings-wrapper .email-settings-sidebar code { background-color: #e0e0e0; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; } .tw-email-settings-wrapper .email-settings-sidebar p { margin-top: 5px; } .tw-email-settings-wrapper .setting-row { margin-bottom: 15px; } .tw-email-settings-wrapper .setting-row input[type="text"] { width: 100%; }
+            .conditional-rule-block { display: flex; align-items: center; gap: 10px; background-color: #f0f0f1; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; } .conditional-rule-block span { font-style: italic; color: #555; } .conditional-rule-block select, .conditional-rule-block input { flex: 1; } .conditional-rule-block .remove-conditional-rule { font-size: 1.5em; text-decoration: none; color: #a00; }
         </style>
         <?php
     }
