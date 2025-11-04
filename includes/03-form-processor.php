@@ -49,27 +49,95 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
         // --- 3. Process if No Errors ---
         if ( empty( $errors ) ) {
             $form_post = get_post($form_id);
-            $submitted_data_string = ''; $user_name = 'Guest'; $user_email = ''; $user_phone = '';
+            
+            // --- 3a. Collect and Map All Submitted Data ---
+            $data_map          = [];
+            $all_fields_html   = '';
+            $all_fields_text   = '';
+            $user_email_address = '';
+            $user_name_guess   = 'Guest';
+            $user_phone_guess  = '';
+
             foreach ( $saved_layout as $row_index => $row ) {
                 foreach ( $row['columns'] as $col_index => $column ) {
                     foreach ( $column as $field_index => $field ) {
                         if ( in_array($field['type'], ['submit','section_header','html_block']) ) continue;
+                        
                         $label = $field['label'] ?? 'Field';
-                        $value_raw = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : 'N/A';
+                        $value_raw = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : '';
                         $value = is_array( $value_raw ) ? implode(', ', array_map('sanitize_text_field', $value_raw)) : sanitize_textarea_field( $value_raw );
-                        $submitted_data_string .= esc_html( $label ) . ":\n" . $value . "\n\n";
-                        if ( stripos( $label, 'name' ) !== false && $user_name === 'Guest' ) $user_name = $value;
-                        if ( $field['type'] === 'email' && empty($user_email) ) $user_email = $value;
-                        if ( $field['type'] === 'tel' && empty($user_phone) ) $user_phone = $value;
+                        
+                        // Populate our data map for tag replacement
+                        $data_map[$label] = $value;
+                        
+                        // Build formatted strings for [all_fields] tag and logging
+                        $all_fields_html .= '<p style="margin: 0 0 10px 0;"><strong>' . esc_html($label) . ':</strong><br>' . nl2br(esc_html($value)) . '</p>';
+                        $all_fields_text .= esc_html($label) . ":\n" . $value . "\n\n";
+                        
+                        // Intelligently find the user's email for the autoresponder
+                        if ( $field['type'] === 'email' && empty($user_email_address) ) {
+                            $user_email_address = $value;
+                        }
+
+                        // Keep guessing name and phone for the Pods logger
+                        if ( stripos( $label, 'name' ) !== false && $user_name_guess === 'Guest' ) $user_name_guess = $value;
+                        if ( $field['type'] === 'tel' && empty($user_phone_guess) ) $user_phone_guess = $value;
                     }
                 }
             }
-            log_form_submission_to_pods([ 'messenger_name' => $user_name, 'phone' => $user_phone, 'email' => $user_email, 'message' => $submitted_data_string, 'form_source' => $form_post->post_title ]);
-            $admin_recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
-            if ( ! empty( $admin_recipients ) ) {
-                wp_mail( $admin_recipients, "New Submission: " . $form_post->post_title, "You have received a new submission from the \"" . $form_post->post_title . "\" form.\n\n--- Submitted Data ---\n" . $submitted_data_string, [ 'Reply-To: ' . $user_name . ' <' . $user_email . '>' ] );
+            
+            // --- 3b. Log to Pods (Preserving Original Functionality) ---
+            log_form_submission_to_pods([ 'messenger_name' => $user_name_guess, 'phone' => $user_phone_guess, 'email' => $user_email_address, 'message' => $all_fields_text, 'form_source' => $form_post->post_title ]);
+            
+            // --- 3c. Send Admin Notification Email ---
+            $admin_email = get_post_meta( $form_id, '_tw_form_admin_email', true );
+            $recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
+            if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
+
+            if ( ! empty( $recipients ) && ! empty( $admin_email ) && is_array( $admin_email ) ) {
+                
+                $subject    = tw_forms_process_tags( $admin_email['subject'], $data_map, $form_post, $all_fields_html );
+                $message    = tw_forms_process_tags( $admin_email['message'], $data_map, $form_post, $all_fields_html );
+                $from_name  = tw_forms_process_tags( $admin_email['from_name'], $data_map, $form_post, $all_fields_html );
+                $from_email = tw_forms_process_tags( $admin_email['from_email'], $data_map, $form_post, $all_fields_html );
+                $reply_to   = tw_forms_process_tags( $admin_email['reply_to'], $data_map, $form_post, $all_fields_html );
+                
+                $headers = [
+                    'Content-Type: text/html; charset=UTF-8',
+                    "From: {$from_name} <{$from_email}>"
+                ];
+
+                // Only add Reply-To if it's a valid email after processing tags
+                if ( is_email( $reply_to ) ) {
+                    $headers[] = "Reply-To: {$reply_to}";
+                }
+                
+                wp_mail( $recipients, $subject, $message, $headers );
             }
-            if ( ! empty( $user_email ) ) { send_user_confirmation_email( $user_email, $user_name, $form_post->post_title, $submitted_data_string ); }
+            
+            // --- 3d. Send User Confirmation Email (Autoresponder) ---
+            $user_email = get_post_meta( $form_id, '_tw_form_user_email', true );
+            
+            if ( ! empty( $user_email['enabled'] ) && ! empty( $user_email_address ) && is_array( $user_email ) ) {
+                
+                $subject    = tw_forms_process_tags( $user_email['subject'], $data_map, $form_post, $all_fields_html );
+                $message    = tw_forms_process_tags( $user_email['message'], $data_map, $form_post, $all_fields_html );
+                $from_name  = tw_forms_process_tags( $user_email['from_name'], $data_map, $form_post, $all_fields_html );
+                $from_email = tw_forms_process_tags( $user_email['from_email'], $data_map, $form_post, $all_fields_html );
+                $reply_to   = tw_forms_process_tags( $user_email['reply_to'], $data_map, $form_post, $all_fields_html );
+
+                $headers = [
+                    'Content-Type: text/html; charset=UTF-8',
+                    "From: {$from_name} <{$from_email}>"
+                ];
+
+                if ( is_email( $reply_to ) ) {
+                    $headers[] = "Reply-To: {$reply_to}";
+                }
+
+                wp_mail( $user_email_address, $subject, $message, $headers );
+            }
+
             return [ 'success' => true, 'message' => '<p style="color: green;">Thank you! Your submission has been received.</p>' ];
         } else {
             $error_message = '<ul class="tw-form-errors">';
@@ -139,7 +207,6 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                                 $html_content = $field['html_content'] ?? ''; $placeholder_text = $field['placeholder'] ?? '';
                                 $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($row_index).'-'.esc_attr($col_index).'-'.esc_attr($field_index);
                                 
-                                // THIS IS THE FIX: Use plural 'tw_form_fields' to match the processor.
                                 $field_name = 'tw_form_fields['.esc_attr($row_index).']['.esc_attr($col_index).']['.esc_attr($field_index).']';
                                 
                                 $required_html = $is_required ? ' required' : ''; $required_span = $is_required ? ' <span style="color:red;">*</span>' : '';
