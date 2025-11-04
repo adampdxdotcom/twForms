@@ -118,24 +118,22 @@ if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
     function tw_forms_render_admin_notification_mb( $post ) {
         $settings = get_post_meta( $post->ID, '_tw_form_admin_email', true );
         $settings = is_array( $settings ) ? $settings : [];
-        $recipients_fallback = get_post_meta( $post->ID, '_tw_form_recipients', true ); // For backward compatibility if updating
+        $recipients_fallback = get_post_meta( $post->ID, '_tw_form_recipients', true ); // For backward compatibility
 
         $to       = $settings['to'] ?? $recipients_fallback;
         $subject  = $settings['subject'] ?? 'New Submission from [form_name]';
-        $reply_to = $settings['reply_to'] ?? '[Your Email Address]';
         $message  = $settings['message'] ?? '<p>A new entry has been submitted via the [form_name] form on your website.</p>[all_fields]';
         ?>
         <div class="tw-email-settings-wrapper">
             <div class="email-settings-main">
                 <div class="setting-row"><label for="admin-email-to"><strong>Send Notifications To</strong></label><input type="text" id="admin-email-to" name="tw_form_admin_email[to]" value="<?php echo esc_attr( $to ); ?>"><p class="description">Enter email addresses, comma-separated. If blank, defaults to the site admin email.</p></div>
                 <div class="setting-row"><label for="admin-email-subject"><strong>Subject</strong></label><input type="text" id="admin-email-subject" name="tw_form_admin_email[subject]" value="<?php echo esc_attr( $subject ); ?>"></div>
-                <div class="setting-row"><label for="admin-email-reply-to"><strong>Reply-To</strong></label><input type="text" id="admin-email-reply-to" name="tw_form_admin_email[reply_to]" value="<?php echo esc_attr( $reply_to ); ?>" placeholder="e.g., [Your Email Address]"><p class="description">Use an email field tag so your staff can reply directly to the user.</p></div>
                 <div class="setting-row"><label for="admin-email-message"><strong>Message</strong></label>
                     <?php wp_editor( $message, 'admin-email-message', ['textarea_name' => 'tw_form_admin_email[message]', 'media_buttons' => false, 'textarea_rows' => 10, 'tinymce' => [ 'toolbar1' => 'bold,italic,bullist,numlist,link,unlink,undo,redo' ]] ); ?>
                 </div>
             </div>
             <div class="email-settings-sidebar">
-                <p>This email will be sent from your site's default address (as configured in WP Mail SMTP).</p>
+                <p>This email is an alert that a new message is waiting in your site's inbox. All replies should be sent from the plugin's messaging system.</p>
                 <hr>
                 <strong>Available Tags</strong><p>Use these tags in your subject or message. They will be replaced with form data.</p>
                 <div class="tags-list"><code>[all_fields]</code> <code>[form_name]</code> <code>[page_url]</code> <code>[user_ip]</code> <code>[submission_date]</code> <code>[submission_time]</code><p>You can also use tags for any field by wrapping its label in brackets, e.g., <code>[Your Name]</code>.</p></div>
@@ -152,7 +150,7 @@ if ( ! function_exists( 'tw_forms_render_user_confirmation_mb' ) ) {
 
         $enabled = ! empty( $settings['enabled'] );
         $subject = $settings['subject'] ?? 'Thank you for your submission';
-        $message = $settings['message'] ?? '<p>Hi [Your Name],</p><p>Thank you for contacting us. We have received your message and will get back to you shortly.</p><hr><p style="font-size: smaller; color: #777;">This is an automated message. Please do not reply to this email.</p>';
+        $message = $settings['message'] ?? '<p>Hi [Your Name],</p><p>Thank you for contacting us. We have received your message.</p><hr><p style="font-size: smaller; color: #777;">This is an automated message. Please do not reply to this email, as this inbox is not monitored.</p>';
         ?>
         <div class="tw-email-settings-wrapper">
              <div class="email-settings-main">
@@ -164,7 +162,7 @@ if ( ! function_exists( 'tw_forms_render_user_confirmation_mb' ) ) {
             </div>
             <div class="email-settings-sidebar">
                 <p>This email's <strong>To</strong> address is automatically set to the email provided by the user in the form.</p>
-                <p>It will be sent from your site's default address, and replies will be disabled.</p>
+                <p>Replies to this message are disabled.</p>
                 <hr>
                 <strong>Available Tags</strong><p>Use these tags in your subject or message.</p>
                 <div class="tags-list"><code>[all_fields]</code> <code>[form_name]</code> <code>[page_url]</code> <code>[user_ip]</code> <code>[submission_date]</code><p>You can also use tags for any field by wrapping its label in brackets, e.g., <code>[Your Name]</code>.</p></div>
@@ -223,7 +221,6 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
                 'to'         => implode( ', ', $sanitized_emails ),
                 'subject'    => sanitize_text_field( $data['subject'] ?? '' ),
                 'message'    => wp_kses_post( $data['message'] ?? '' ),
-                'reply_to'   => sanitize_text_field( $data['reply_to'] ?? '' ),
             ];
             update_post_meta( $post_id, '_tw_form_admin_email', $sanitized_data );
             // Delete the old meta key to avoid confusion
