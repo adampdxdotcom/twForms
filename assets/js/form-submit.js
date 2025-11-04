@@ -5,20 +5,31 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     forms.forEach(function(form) {
-        // We listen for the 'submit' event on the form itself, not the button click.
-        // This is more robust and respects HTML5 validation.
         form.addEventListener('submit', function (e) {
-            e.preventDefault(); // Always prevent the default page reload
+            e.preventDefault(); // Prevent the default page reload
 
+            // --- THIS IS THE FIX ---
+            // First, find the main container that holds both the form and the status div.
+            const container = form.closest('.tw-form-container');
+            if (!container) {
+                console.error('TW Forms: Could not find parent .tw-form-container.');
+                return;
+            }
+            
             const button = form.querySelector('button[name="submit_tw_form"]');
-            const statusDiv = form.querySelector('.form-status-message');
+            // Now, find the status div within the main container.
+            const statusDiv = container.querySelector('.form-status-message');
+            // --- END FIX ---
+            
             const originalButtonText = button.textContent;
 
             button.disabled = true;
             button.textContent = 'Submitting...';
-            statusDiv.innerHTML = '';
+            if (statusDiv) statusDiv.innerHTML = ''; // Clear previous messages
 
-            // This function sends the actual AJAX request.
+            const formData = new FormData(form);
+            formData.append('action', 'tw_forms_submit');
+
             const sendAjaxRequest = (formData) => {
                 fetch(twForms.ajaxurl, {
                     method: 'POST',
@@ -26,15 +37,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        statusDiv.innerHTML = data.data.message;
-                        form.reset();
-                    } else {
-                        statusDiv.innerHTML = data.data.message;
+                    if (statusDiv) {
+                        if (data.success) {
+                            statusDiv.innerHTML = data.data.message;
+                            form.reset();
+                        } else {
+                            statusDiv.innerHTML = data.data.message;
+                        }
                     }
                 })
                 .catch(error => {
-                    statusDiv.innerHTML = '<p style="color: red;">A network error occurred. Please try again.</p>';
+                    if (statusDiv) statusDiv.innerHTML = '<p style="color: red;">A network error occurred. Please try again.</p>';
                     console.error('Form Submission Error:', error);
                 })
                 .finally(() => {
@@ -43,25 +56,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             };
 
-            const formData = new FormData(form);
-            formData.append('action', 'tw_forms_submit');
-
-            // --- NEW: reCAPTCHA Integration ---
-            // Check if reCAPTCHA is enabled for this site (twForms.siteKey will exist).
             if (twForms.siteKey && typeof grecaptcha !== 'undefined') {
                 button.textContent = 'Verifying...';
                 grecaptcha.ready(function() {
                     grecaptcha.execute(twForms.siteKey, { action: 'form_submit' }).then(function(token) {
                         formData.append('recaptcha_token', token);
-                        sendAjaxRequest(formData); // Send request AFTER getting token
+
+                        let tokenInput = form.querySelector('input[name="recaptcha_token"]');
+                        if (!tokenInput) {
+                            tokenInput = document.createElement('input');
+                            tokenInput.type = 'hidden';
+                            tokenInput.name = 'recaptcha_token';
+                            form.appendChild(tokenInput);
+                        }
+                        tokenInput.value = token;
+
+                        sendAjaxRequest(formData);
                     }).catch(function(error) {
-                        statusDiv.innerHTML = '<p style="color: red;">Could not get spam protection token. Please try again.</p>';
+                        if (statusDiv) statusDiv.innerHTML = '<p style="color: red;">Could not get spam protection token. Please try again.</p>';
                         button.disabled = false;
                         button.textContent = originalButtonText;
                     });
                 });
             } else {
-                // If reCAPTCHA is not enabled, send the request immediately.
                 sendAjaxRequest(formData);
             }
         });
