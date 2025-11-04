@@ -1,10 +1,9 @@
 <?php
 /**
- * Handles the universal [tw_form] shortcode, layout rendering, and processing.
- * Renders Dropdown and Radio Button Group field types.
+ * Handles the [tw_form] shortcode, AJAX processing, and layout rendering.
  *
  * @package TW_Forms
- * @version 2.4.0
+ * @version 2.5.0
  */
 
 // If this file is called directly, abort.
@@ -12,6 +11,100 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
+// =============================================================================
+// == 1. DEDICATED FORM PROCESSING FUNCTION
+// =============================================================================
+if ( ! function_exists( 'tw_forms_process_submission' ) ) {
+    /**
+     * Central function to handle all form validation and processing.
+     * This can be called by both the AJAX handler and the shortcode fallback.
+     *
+     * @return array An array indicating success status and a message.
+     */
+    function tw_forms_process_submission() {
+        $form_id = isset( $_POST['tw_form_id'] ) ? intval( $_POST['tw_form_id'] ) : 0;
+        if ( ! $form_id ) return [ 'success' => false, 'message' => '<p style="color: red;">Invalid form submission.</p>' ];
+
+        // --- 1. Spam & Security Checks ---
+        if ( ! empty($_POST['user_nickname_h']) ) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
+        $time_check = isset($_POST['form_timestamp_h']) ? (time() - intval(base64_decode($_POST['form_timestamp_h']))) : 999; if ($time_check < 3) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
+        if ( ! isset( $_POST['tw_form_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_nonce'], 'process_tw_form_' . $form_id ) ) { return [ 'success' => false, 'message' => '<p style="color: red;">Security check failed.</p>' ]; }
+        if (!verify_recaptcha_v3($_POST['recaptcha_token'] ?? '')) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
+
+        // --- 2. Validation Loop ---
+        $saved_layout = get_post_meta( $form_id, '_tw_form_layout', true );
+        $errors = []; $form_data = $_POST['tw_form_fields'] ?? [];
+        if ( ! empty( $saved_layout ) && is_array( $saved_layout ) ) {
+            foreach ( $saved_layout as $row_index => $row ) {
+                foreach ( $row['columns'] as $col_index => $column ) {
+                    foreach ( $column as $field_index => $field ) {
+                        if ( in_array($field['type'], ['submit','section_header','html_block']) ) continue;
+                        $value = isset( $form_data[$row_index][$col_index][$field_index] ) ? ( is_string( $form_data[$row_index][$col_index][$field_index] ) ? trim($form_data[$row_index][$col_index][$field_index]) : $form_data[$row_index][$col_index][$field_index] ) : '';
+                        if ( ! empty( $field['required'] ) && empty( $value ) ) { $errors[] = 'The "' . esc_html( $field['label'] ) . '" field is required.'; }
+                        if ( $field['type'] === 'email' && ! empty( $value ) && ! is_email( $value ) ) { $errors[] = 'Please enter a valid email for "' . esc_html( $field['label'] ) . '".'; }
+                        if ( ! empty( $field['confirm'] ) ) {
+                            $confirm_key = $row_index.'_'.$col_index.'_'.$field_index.'_confirm';
+                            $confirm_value = isset( $_POST['tw_form_fields_confirm'][$confirm_key] ) ? trim( $_POST['tw_form_fields_confirm'][$confirm_key] ) : '';
+                            if ( $value !== $confirm_value ) { $errors[] = 'The email addresses for "' . esc_html( $field['label'] ) . '" do not match.'; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 3. Process if No Errors ---
+        if ( empty( $errors ) ) {
+            $form_post = get_post($form_id);
+            $submitted_data_string = ''; $user_name = 'Guest'; $user_email = ''; $user_phone = '';
+            foreach ( $saved_layout as $row_index => $row ) {
+                foreach ( $row['columns'] as $col_index => $column ) {
+                    foreach ( $column as $field_index => $field ) {
+                        if ( in_array($field['type'], ['submit','section_header','html_block']) ) continue;
+                        $label = $field['label'] ?? 'Field';
+                        $value_raw = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : 'N/A';
+                        $value = is_array( $value_raw ) ? implode(', ', array_map('sanitize_text_field', $value_raw)) : sanitize_textarea_field( $value_raw );
+                        $submitted_data_string .= esc_html( $label ) . ":\n" . $value . "\n\n";
+                        if ( stripos( $label, 'name' ) !== false && $user_name === 'Guest' ) $user_name = $value;
+                        if ( $field['type'] === 'email' && empty($user_email) ) $user_email = $value;
+                        if ( $field['type'] === 'tel' && empty($user_phone) ) $user_phone = $value;
+                    }
+                }
+            }
+            log_form_submission_to_pods([ 'messenger_name' => $user_name, 'phone' => $user_phone, 'email' => $user_email, 'message' => $submitted_data_string, 'form_source' => $form_post->post_title ]);
+            $admin_recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
+            if ( ! empty( $admin_recipients ) ) {
+                wp_mail( $admin_recipients, "New Submission: " . $form_post->post_title, "You have received a new submission from the \"" . $form_post->post_title . "\" form.\n\n--- Submitted Data ---\n" . $submitted_data_string, [ 'Reply-To: ' . $user_name . ' <' . $user_email . '>' ] );
+            }
+            if ( ! empty( $user_email ) ) { send_user_confirmation_email( $user_email, $user_name, $form_post->post_title, $submitted_data_string ); }
+            return [ 'success' => true, 'message' => '<p style="color: green;">Thank you! Your submission has been received.</p>' ];
+        } else {
+            $error_message = '<ul class="tw-form-errors">';
+            foreach ( $errors as $error ) { $error_message .= '<li>' . $error . '</li>'; }
+            $error_message .= '</ul>';
+            return [ 'success' => false, 'message' => $error_message ];
+        }
+    }
+}
+
+// =============================================================================
+// == 2. AJAX ENDPOINT
+// =============================================================================
+if ( ! function_exists( 'tw_forms_ajax_handler' ) ) {
+    function tw_forms_ajax_handler() {
+        $result = tw_forms_process_submission();
+        if ( $result['success'] ) {
+            wp_send_json_success( [ 'message' => $result['message'] ] );
+        } else {
+            wp_send_json_error( [ 'message' => $result['message'] ] );
+        }
+    }
+    add_action( 'wp_ajax_tw_forms_submit', 'tw_forms_ajax_handler' );
+    add_action( 'wp_ajax_nopriv_tw_forms_submit', 'tw_forms_ajax_handler' );
+}
+
+// =============================================================================
+// == 3. UNIVERSAL FORM RENDERER (SHORTCODE)
+// =============================================================================
 if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
     function tw_forms_universal_shortcode_handler( $atts ) {
         $atts = shortcode_atts( [ 'id' => 0, ], $atts, 'tw_form' );
@@ -25,63 +118,15 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         $status_message = '';
         $submitted_values = [];
 
-        if ( isset( $_POST['submit_tw_form'] ) && isset( $_POST['tw_form_id'] ) && intval( $_POST['tw_form_id'] ) === $form_id ) {
-            if ( ! empty($_POST['user_nickname_h']) ) { return '<p style="color: green;">Thank you for your submission.</p>'; }
-            $time_check = isset($_POST['form_timestamp_h']) ? (time() - intval(base64_decode($_POST['form_timestamp_h']))) : 999; if ($time_check < 3) { return '<p style="color: green;">Thank you for your submission.</p>'; }
-            if ( ! isset( $_POST['tw_form_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_nonce'], 'process_tw_form_' . $form_id ) ) { die( 'Security check failed.' ); }
-            if (!verify_recaptcha_v3($_POST['recaptcha_token'] ?? '')) { return '<p style="color: green;">Thank you for your submission.</p>'; }
-
-            $errors = []; $form_data = $_POST['tw_form_fields'] ?? []; $submitted_values = $form_data;
-            if ( ! empty( $saved_layout ) && is_array( $saved_layout ) ) {
-                foreach ( $saved_layout as $row_index => $row ) {
-                    foreach ( $row['columns'] as $col_index => $column ) {
-                        foreach ( $column as $field_index => $field ) {
-                            if ( in_array($field['type'], ['submit', 'section_header', 'html_block']) ) continue;
-                            $value = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : '';
-                            if ( is_string($value) ) $value = trim($value);
-                            if ( ! empty( $field['required'] ) && empty( $value ) ) { $errors[] = 'The "' . esc_html( $field['label'] ) . '" field is required.'; }
-                            if ( $field['type'] === 'email' && ! empty( $value ) && ! is_email( $value ) ) { $errors[] = 'Please enter a valid email for "' . esc_html( $field['label'] ) . '".'; }
-                            if ( ! empty( $field['confirm'] ) ) {
-                                $confirm_key = $row_index . '_' . $col_index . '_' . $field_index . '_confirm';
-                                $confirm_value = isset( $_POST['tw_form_fields_confirm'][$confirm_key] ) ? trim( $_POST['tw_form_fields_confirm'][$confirm_key] ) : '';
-                                if ( $value !== $confirm_value ) { $errors[] = 'The email addresses for "' . esc_html( $field['label'] ) . '" do not match.'; }
-                            }
-                        }
-                    }
-                }
-            }
-            if ( empty( $errors ) ) {
-                $submitted_values = []; $submitted_data_string = ''; $user_name = 'Guest'; $user_email = ''; $user_phone = '';
-                foreach ( $saved_layout as $row_index => $row ) {
-                    foreach ( $row['columns'] as $col_index => $column ) {
-                        foreach ( $column as $field_index => $field ) {
-                            if ( in_array($field['type'], ['submit', 'section_header', 'html_block']) ) continue;
-                            $label = $field['label'] ?? 'Field';
-                            $value_raw = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : 'N/A';
-                            if ( is_array( $value_raw ) ) { $value = implode(', ', array_map('sanitize_text_field', $value_raw)); } else { $value = sanitize_textarea_field( $value_raw ); }
-                            $submitted_data_string .= esc_html( $label ) . ":\n" . $value . "\n\n";
-                            if ( stripos( $label, 'name' ) !== false && $user_name === 'Guest' ) $user_name = $value;
-                            if ( $field['type'] === 'email' && empty($user_email) ) $user_email = $value;
-                            if ( $field['type'] === 'tel' && empty($user_phone) ) $user_phone = $value;
-                        }
-                    }
-                }
-                log_form_submission_to_pods([ 'messenger_name' => $user_name, 'phone' => $user_phone, 'email' => $user_email, 'message' => $submitted_data_string, 'form_source' => $form_post->post_title ]);
-                $admin_recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
-                if ( ! empty( $admin_recipients ) ) {
-                    $admin_subject = "New Submission: " . $form_post->post_title;
-                    $admin_body = "You have received a new submission from the \"" . $form_post->post_title . "\" form.\n\n--- Submitted Data ---\n" . $submitted_data_string;
-                    $headers = [ 'Reply-To: ' . $user_name . ' <' . $user_email . '>' ];
-                    wp_mail( $admin_recipients, $admin_subject, $admin_body, $headers );
-                }
-                if ( ! empty( $user_email ) ) { send_user_confirmation_email( $user_email, $user_name, $form_post->post_title, $submitted_data_string ); }
-                $status_message = '<p style="color: green;">Thank you! Your submission has been received.</p>';
-            } else {
-                $status_message = '<ul class="tw-form-errors">';
-                foreach ( $errors as $error ) { $status_message .= '<li>' . $error . '</li>'; }
-                $status_message .= '</ul>';
+        // Fallback for non-JS submissions
+        if ( isset( $_POST['submit_tw_form'] ) && ! wp_doing_ajax() ) {
+            $result = tw_forms_process_submission();
+            $status_message = $result['message'];
+            if ( ! $result['success'] ) {
+                $submitted_values = $_POST['tw_form_fields'] ?? [];
             }
         }
+        
         ob_start(); ?>
         <div class="tw-form-container">
             <div id="tw-form-status-<?php echo esc_attr( $form_id ); ?>" class="form-status-message"><?php echo $status_message; ?></div>
