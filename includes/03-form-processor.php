@@ -1,9 +1,9 @@
 <?php
 /**
- * Handles the [tw_form] shortcode, AJAX processing, and layout rendering.
+ * Handles the universal [tw_form] shortcode, AJAX processing, and layout rendering.
  *
  * @package TW_Forms
- * @version 2.5.0
+ * @version 2.5.1
  */
 
 // If this file is called directly, abort.
@@ -15,12 +15,6 @@ if ( ! defined( 'WPINC' ) ) {
 // == 1. DEDICATED FORM PROCESSING FUNCTION
 // =============================================================================
 if ( ! function_exists( 'tw_forms_process_submission' ) ) {
-    /**
-     * Central function to handle all form validation and processing.
-     * This can be called by both the AJAX handler and the shortcode fallback.
-     *
-     * @return array An array indicating success status and a message.
-     */
     function tw_forms_process_submission() {
         $form_id = isset( $_POST['tw_form_id'] ) ? intval( $_POST['tw_form_id'] ) : 0;
         if ( ! $form_id ) return [ 'success' => false, 'message' => '<p style="color: red;">Invalid form submission.</p>' ];
@@ -118,7 +112,6 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         $status_message = '';
         $submitted_values = [];
 
-        // Fallback for non-JS submissions
         if ( isset( $_POST['submit_tw_form'] ) && ! wp_doing_ajax() ) {
             $result = tw_forms_process_submission();
             $status_message = $result['message'];
@@ -145,7 +138,10 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                                 $field_type = $field['type'] ?? 'text'; $field_label = $field['label'] ?? ''; $is_required = ! empty( $field['required'] ); $needs_confirm = ! empty( $field['confirm'] );
                                 $html_content = $field['html_content'] ?? ''; $placeholder_text = $field['placeholder'] ?? '';
                                 $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($row_index).'-'.esc_attr($col_index).'-'.esc_attr($field_index);
-                                $field_name = 'tw_form_field['.esc_attr($row_index).']['.esc_attr($col_index).']['.esc_attr($field_index).']';
+                                
+                                // THIS IS THE FIX: Use plural 'tw_form_fields' to match the processor.
+                                $field_name = 'tw_form_fields['.esc_attr($row_index).']['.esc_attr($col_index).']['.esc_attr($field_index).']';
+                                
                                 $required_html = $is_required ? ' required' : ''; $required_span = $is_required ? ' <span style="color:red;">*</span>' : '';
                                 $repop_value = isset( $submitted_values[$row_index][$col_index][$field_index] ) ? $submitted_values[$row_index][$col_index][$field_index] : '';
                                 ?>
@@ -208,6 +204,9 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
     add_shortcode( 'tw_form', 'tw_forms_universal_shortcode_handler' );
 }
 
+// =============================================================================
+// == 4. HELPER SCRIPTS & STYLES
+// =============================================================================
 if ( ! function_exists('tw_forms_print_layout_css') ) {
     function tw_forms_print_layout_css() {
         static $css_printed = false; if ($css_printed) return; ?>
@@ -242,7 +241,13 @@ if ( ! function_exists('enqueue_form_spam_protection_scripts') ) {
     }
 }
 
-
+if ( ! function_exists('add_recaptcha_form_submission_script') ) {
+    function add_recaptcha_form_submission_script() {
+        // This function is now deprecated as its logic has been moved to assets/js/form-submit.js
+    }
+    // The hook is intentionally left here but the function is empty.
+    add_action('wp_footer', 'add_recaptcha_form_submission_script');
+}
 
 if ( ! function_exists('custom_recaptcha_badge_styles') ) {
     function custom_recaptcha_badge_styles() {
