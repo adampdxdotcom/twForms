@@ -20,6 +20,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/02-form-helpers.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/03-form-processor.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/04-form-cpt.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/05-form-editor.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/06-admin-dashboard.php';
 
 // =============================================================================
 // == Enqueue Front-End Scripts
