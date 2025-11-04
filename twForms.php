@@ -27,3 +27,6 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/02-form-helpers.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/03-form-processor.php';
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/04-form-cpt.php';
+
+// Loads the meta boxes for the form editor screen
+require_once plugin_dir_path( __FILE__ ) . 'includes/05-form-editor.php';
