@@ -67,47 +67,43 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                         $value_raw = isset( $form_data[$row_index][$col_index][$field_index] ) ? $form_data[$row_index][$col_index][$field_index] : '';
                         $value = is_array( $value_raw ) ? implode(', ', array_map('sanitize_text_field', $value_raw)) : sanitize_textarea_field( $value_raw );
                         
-                        // Populate our data map for tag replacement
                         $data_map[$label] = $value;
-                        
-                        // Build formatted strings for [all_fields] tag and logging
                         $all_fields_html .= '<p style="margin: 0 0 10px 0;"><strong>' . esc_html($label) . ':</strong><br>' . nl2br(esc_html($value)) . '</p>';
                         $all_fields_text .= esc_html($label) . ":\n" . $value . "\n\n";
                         
-                        // Intelligently find the user's email for the autoresponder
                         if ( $field['type'] === 'email' && empty($user_email_address) ) {
                             $user_email_address = $value;
                         }
-
-                        // Keep guessing name and phone for the Pods logger
                         if ( stripos( $label, 'name' ) !== false && $user_name_guess === 'Guest' ) $user_name_guess = $value;
                         if ( $field['type'] === 'tel' && empty($user_phone_guess) ) $user_phone_guess = $value;
                     }
                 }
             }
             
-            // --- 3b. Log to Pods (Preserving Original Functionality) ---
+            // --- 3b. Log to Pods ---
             log_form_submission_to_pods([ 'messenger_name' => $user_name_guess, 'phone' => $user_phone_guess, 'email' => $user_email_address, 'message' => $all_fields_text, 'form_source' => $form_post->post_title ]);
             
             // --- 3c. Send Admin Notification Email ---
-            $admin_email = get_post_meta( $form_id, '_tw_form_admin_email', true );
-            $recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
+            $admin_email_settings = get_post_meta( $form_id, '_tw_form_admin_email', true );
+            $recipients = $admin_email_settings['to'] ?? get_post_meta( $form_id, '_tw_form_recipients', true ); // Fallback to old meta for safety
             if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
 
-            if ( ! empty( $recipients ) && ! empty( $admin_email ) && is_array( $admin_email ) ) {
+            if ( ! empty( $recipients ) && ! empty( $admin_email_settings ) && is_array( $admin_email_settings ) ) {
                 
-                $subject    = tw_forms_process_tags( $admin_email['subject'], $data_map, $form_post, $all_fields_html );
-                $message    = tw_forms_process_tags( $admin_email['message'], $data_map, $form_post, $all_fields_html );
-                $from_name  = tw_forms_process_tags( $admin_email['from_name'], $data_map, $form_post, $all_fields_html );
-                $from_email = tw_forms_process_tags( $admin_email['from_email'], $data_map, $form_post, $all_fields_html );
-                $reply_to   = tw_forms_process_tags( $admin_email['reply_to'], $data_map, $form_post, '' ); // Pass empty html for reply_to
+                $subject    = tw_forms_process_tags( $admin_email_settings['subject'], $data_map, $form_post, $all_fields_html );
+                $message    = tw_forms_process_tags( $admin_email_settings['message'], $data_map, $form_post, $all_fields_html );
+                $reply_to   = tw_forms_process_tags( $admin_email_settings['reply_to'], $data_map, $form_post, '' );
+                
+                // From address is handled automatically by WP Mail SMTP, but we set a sensible default.
+                $from_name  = get_bloginfo('name');
+                $from_email = get_option('admin_email');
                 
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
                     "From: {$from_name} <{$from_email}>"
                 ];
 
-                // Only add Reply-To if it's a valid email after processing tags
+                // Set Reply-To so staff can reply directly to the user
                 if ( is_email( $reply_to ) ) {
                     $headers[] = "Reply-To: {$reply_to}";
                 }
@@ -116,24 +112,22 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
             }
             
             // --- 3d. Send User Confirmation Email (Autoresponder) ---
-            $user_email = get_post_meta( $form_id, '_tw_form_user_email', true );
+            $user_email_settings = get_post_meta( $form_id, '_tw_form_user_email', true );
             
-            if ( ! empty( $user_email['enabled'] ) && ! empty( $user_email_address ) && is_array( $user_email ) ) {
+            if ( ! empty( $user_email_settings['enabled'] ) && ! empty( $user_email_address ) && is_array( $user_email_settings ) ) {
                 
-                $subject    = tw_forms_process_tags( $user_email['subject'], $data_map, $form_post, $all_fields_html );
-                $message    = tw_forms_process_tags( $user_email['message'], $data_map, $form_post, $all_fields_html );
-                $from_name  = tw_forms_process_tags( $user_email['from_name'], $data_map, $form_post, $all_fields_html );
-                $from_email = tw_forms_process_tags( $user_email['from_email'], $data_map, $form_post, $all_fields_html );
-                $reply_to   = tw_forms_process_tags( $user_email['reply_to'], $data_map, $form_post, '' ); // Pass empty html for reply_to
+                $subject    = tw_forms_process_tags( $user_email_settings['subject'], $data_map, $form_post, $all_fields_html );
+                $message    = tw_forms_process_tags( $user_email_settings['message'], $data_map, $form_post, $all_fields_html );
+
+                // FROM and REPLY-TO are handled automatically to enforce the no-reply policy
+                $from_name  = get_bloginfo('name');
+                $from_email = get_option('admin_email'); // Will be overridden by WP Mail SMTP to 'no-reply@...'
 
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
-                    "From: {$from_name} <{$from_email}>"
+                    "From: {$from_name} <{$from_email}>",
+                    "Reply-To: {$from_name} <{$from_email}>" // Force replies to the non-monitored From address
                 ];
-
-                if ( is_email( $reply_to ) ) {
-                    $headers[] = "Reply-To: {$reply_to}";
-                }
 
                 wp_mail( $user_email_address, $subject, $message, $headers );
             }
