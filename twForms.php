@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       TW Forms
  * Description:       A custom forms and messaging plugin for the Theatre West website
- * Version:           1.0.0
+ * Version:           2.0.0
  * Author:            Adam Michaels
  */
 
@@ -25,3 +25,5 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/02-form-helpers.php';
 
 // Loads the form shortcodes, processing logic, and related scripts
 require_once plugin_dir_path( __FILE__ ) . 'includes/03-form-processor.php';
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/04-form-cpt.php';
