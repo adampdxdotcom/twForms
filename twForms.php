@@ -30,21 +30,26 @@ if ( ! function_exists( 'tw_forms_enqueue_scripts' ) ) {
      * Enqueues scripts needed for the front-end forms.
      */
     function tw_forms_enqueue_scripts() {
-        // Enqueue our new AJAX submission script.
+        // Enqueue our AJAX submission script.
         wp_enqueue_script(
             'tw-forms-submit',
             plugin_dir_url( __FILE__ ) . 'assets/js/form-submit.js',
-            [], // No dependencies
-            '2.5.0',
-            true // Load in the footer
+            [],
+            '2.5.1', // Bump version
+            true
         );
 
-        // Pass the WordPress AJAX URL to our script.
+        // Get reCAPTCHA settings to pass to the script.
+        $recaptcha_options = get_option('my_recaptcha_settings', []);
+        $site_key = ( !empty($recaptcha_options['disable']) ) ? '' : ($recaptcha_options['site_key'] ?? '');
+
+        // Pass both the AJAX URL and the reCAPTCHA site key.
         wp_localize_script(
             'tw-forms-submit',
-            'twForms', // This creates a `twForms` object in JavaScript
+            'twForms',
             [
-                'ajaxurl' => admin_url( 'admin-ajax.php' ),
+                'ajaxurl'  => admin_url( 'admin-ajax.php' ),
+                'siteKey'  => $site_key,
             ]
         );
     }
