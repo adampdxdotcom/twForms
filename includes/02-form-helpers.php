@@ -8,6 +8,48 @@ if ( ! defined( 'WPINC' ) ) {
 // == REUSABLE HELPER FUNCTIONS FOR FORMS
 // =============================================================================
 
+if ( ! function_exists( 'tw_forms_process_tags' ) ) {
+    /**
+     * Processes a string (like an email subject or body) and replaces all merge tags with their corresponding values.
+     *
+     * @param string   $content         The string containing merge tags like [field_label].
+     * @param array    $data_map        An associative array of submitted data, mapping 'Field Label' => 'Submitted Value'.
+     * @param WP_Post  $form_post       The post object for the form being processed.
+     * @param string   $all_fields_html A pre-formatted HTML string of all submitted fields.
+     * @return string The processed string with all tags replaced.
+     */
+    function tw_forms_process_tags( $content, $data_map, $form_post, $all_fields_html ) {
+        if ( empty( $content ) || ! is_string( $content ) ) {
+            return $content;
+        }
+
+        // --- 1. Process Utility and Magic Tags ---
+        $utility_replacements = [
+            '[all_fields]'      => $all_fields_html,
+            '[form_name]'       => get_the_title( $form_post ),
+            '[page_url]'        => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( $_SERVER['HTTP_REFERER'] ) : '',
+            '[user_ip]'         => $_SERVER['REMOTE_ADDR'] ?? 'Unknown',
+            '[submission_date]' => wp_date( get_option( 'date_format' ), time() ),
+            '[submission_time]' => wp_date( get_option( 'time_format' ), time() ),
+        ];
+
+        foreach ( $utility_replacements as $tag => $value ) {
+            $content = str_replace( $tag, $value, $content );
+        }
+
+        // --- 2. Process Field-Specific Tags ---
+        if ( ! empty( $data_map ) && is_array( $data_map ) ) {
+            foreach ( $data_map as $label => $value ) {
+                // For use in HTML emails, convert newlines to <br> and escape the value.
+                $html_safe_value = nl2br( esc_html( $value ) );
+                $content = str_replace( '[' . $label . ']', $html_safe_value, $content );
+            }
+        }
+
+        return $content;
+    }
+}
+
 if ( ! function_exists('verify_recaptcha_v3') ) {
     function verify_recaptcha_v3($token) {
         $recaptcha_options = get_option('my_recaptcha_settings', []);
@@ -68,7 +110,19 @@ if ( ! function_exists('validate_and_format_phone_number') ) {
     }
 }
 
+
+// =============================================================================
+// == LEGACY EMAIL FUNCTIONS (DEPRECATED)
+// =============================================================================
+// The functions below are part of the old, hardcoded email system. They are
+// being replaced by the new dynamic template system and will be removed in a
+// future version of the plugin.
+// =============================================================================
+
 if (!function_exists('send_custom_admin_notification')) {
+    /**
+     * @deprecated 2.5.0 This function is deprecated. Use the new per-form email template system.
+     */
     function send_custom_admin_notification($to, $template_key, $form_data, $submitted_data_string) {
         if (empty($to)) {
             return true; // Don't try to send if no recipient is set
@@ -121,6 +175,9 @@ if (!function_exists('send_custom_admin_notification')) {
 }
 
 if (!function_exists('send_user_confirmation_email')) {
+    /**
+     * @deprecated 2.5.0 This function is deprecated. Use the new per-form email template system.
+     */
     function send_user_confirmation_email($user_email, $user_name, $form_source, $submitted_data) {
         $templates = get_option('my_form_email_templates', []);
         $subject = $templates['subject'] ?? 'Thank you for your submission!';
