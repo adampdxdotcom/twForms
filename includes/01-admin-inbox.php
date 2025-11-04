@@ -271,6 +271,8 @@ if ( ! function_exists( 'my_custom_message_viewer_menu' ) ) {
 
         // --- STEP 3: MOVE ALL SUBMENU PAGES UNDER THE NEW PARENT ---
         add_submenu_page($parent_slug, 'All Messages', 'All Messages', 'edit_posts', $parent_slug);
+        add_submenu_page($parent_slug, 'All Forms', 'All Forms', 'edit_posts', 'edit.php?post_type=tw_form');
+        add_submenu_page($parent_slug, 'Add New Form', 'Add New Form', 'edit_posts', 'post-new.php?post_type=tw_form');
         add_submenu_page($parent_slug, 'Trash', 'Trash', 'edit_posts', $base_page_url.'&post_status=trash');
         add_submenu_page($parent_slug, 'Blacklist Manager', 'Blacklist Manager', 'edit_posts', 'edit.php?post_type=blacklist');
         add_submenu_page($parent_slug, 'Form Settings', 'Settings', 'manage_options', 'my_message_settings_page', 'my_custom_message_settings_page');
