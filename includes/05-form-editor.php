@@ -3,7 +3,7 @@
  * Creates the Meta Boxes for the Form Editor screen with a Row/Column Layout Builder.
  *
  * @package TW_Forms
- * @version 2.1.0
+ * @version 2.1.1
  */
 
 // If this file is called directly, abort.
@@ -19,6 +19,9 @@ if ( ! function_exists( 'tw_forms_editor_add_meta_boxes' ) ) {
     function tw_forms_editor_add_meta_boxes() {
         add_meta_box( 'tw_form_builder_mb', 'Form Layout & Fields', 'tw_forms_render_builder_mb', 'tw_form', 'normal', 'high' );
         add_meta_box( 'tw_form_settings_mb', 'Form Settings', 'tw_forms_render_settings_mb', 'tw_form', 'side', 'default' );
+        
+        // NEW: Add a meta box specifically for displaying the shortcode.
+        add_meta_box( 'tw_form_shortcode_mb', 'Shortcode', 'tw_forms_render_shortcode_mb', 'tw_form', 'side', 'high' );
     }
     add_action( 'add_meta_boxes_tw_form', 'tw_forms_editor_add_meta_boxes' );
 }
@@ -33,6 +36,19 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
         $saved_layout = get_post_meta( $post->ID, '_tw_form_layout', true );
         ?>
         <div class="tw-form-builder-wrapper">
+            
+            <!-- NEW: A dedicated header for the builder controls -->
+            <div class="builder-header">
+                <h3 class="builder-title">Form Layout</h3>
+                <div class="add-row-container">
+                    <span>Add Row:</span>
+                    <button type="button" class="button add-row-button" data-layout="100">1 Col</button>
+                    <button type="button" class="button add-row-button" data-layout="50-50">2 Col</button>
+                    <button type="button" class="button add-row-button" data-layout="33-33-33">3 Col</button>
+                    <button type="button" class="button add-row-button" data-layout="25-25-25-25">4 Col</button>
+                </div>
+            </div>
+
             <div id="layout-container">
                 <?php if ( ! empty( $saved_layout ) && is_array( $saved_layout ) ) : ?>
                     <?php foreach ( $saved_layout as $row_index => $row ) : ?>
@@ -41,15 +57,6 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                 <?php else : ?>
                     <p class="empty-state">No rows yet. Click "Add Row" to begin building your form.</p>
                 <?php endif; ?>
-            </div>
-            <div class="builder-actions">
-                <div class="add-row-container">
-                    <span>Add New Row with Layout:</span>
-                    <button type="button" class="button add-row-button" data-layout="100">1 Column</button>
-                    <button type="button" class="button add-row-button" data-layout="50-50">2 Columns</button>
-                    <button type="button" class="button add-row-button" data-layout="33-33-33">3 Columns</button>
-                    <button type="button" class="button add-row-button" data-layout="25-25-25-25">4 Columns</button>
-                </div>
             </div>
         </div>
 
@@ -64,10 +71,11 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
         
         <style>
             .tw-form-builder-wrapper { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; }
+            .builder-header { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f9f9f9; border: 1px solid #ccd0d4; border-bottom: none; }
+            .builder-header .builder-title { margin: 0; font-size: 1.2em; }
+            .add-row-container { display: flex; align-items: center; gap: 10px; }
             #layout-container { border: 1px solid #ccd0d4; background: #fff; padding: 15px; min-height: 150px; }
             #layout-container .empty-state { color: #777; text-align: center; margin: 40px 0; font-size: 1.2em; }
-            .builder-actions { margin-top: 15px; padding: 10px; background: #f9f9f9; border: 1px solid #ccd0d4; }
-            .add-row-container { display: flex; align-items: center; gap: 10px; }
             .row-block { border: 1px solid #999; margin-bottom: 15px; background: #fdfdfd; }
             .row-header { display: flex; justify-content: space-between; align-items: center; background: #e0e0e0; padding: 5px 10px; cursor: move; border-bottom: 1px solid #ccc; }
             .row-header .row-label { font-weight: bold; }
@@ -159,10 +167,22 @@ if ( ! function_exists( 'tw_forms_render_settings_mb' ) ) {
     }
 }
 
+// NEW: Render function for our shortcode meta box.
+if ( ! function_exists( 'tw_forms_render_shortcode_mb' ) ) {
+    function tw_forms_render_shortcode_mb( $post ) {
+        $shortcode = '[tw_form id="' . $post->ID . '"]';
+        ?>
+        <div class="tw-shortcode-wrapper">
+            <p>Paste this shortcode onto any page or post to display this form.</p>
+            <input type="text" readonly="readonly" value="<?php echo esc_attr( $shortcode ); ?>" onclick="this.select();" style="width: 100%; text-align: center; font-weight: bold; padding: 5px; cursor: copy;">
+        </div>
+        <?php
+    }
+}
+
 // -----------------------------------------------------------------------------
 // 3. SAVE META BOX DATA
 // -----------------------------------------------------------------------------
-
 if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
     function tw_forms_save_meta_box_data( $post_id ) {
         if ( ! isset( $_POST['tw_form_meta_box_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_meta_box_nonce'], 'tw_form_save_meta_box_data' ) ) return;
@@ -208,7 +228,6 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
 // -----------------------------------------------------------------------------
 // 4. ENQUEUE EDITOR JAVASCRIPT
 // -----------------------------------------------------------------------------
-
 if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
     function tw_forms_editor_enqueue_scripts() {
         global $pagenow, $post;
@@ -226,14 +245,15 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                 function updateEmptyState() { if (layoutContainer.find('.row-block').length === 0) { layoutContainer.html('<p class="empty-state">No rows yet. Click "Add Row" to begin building your form.</p>'); } else { layoutContainer.find('.empty-state').remove(); } }
                 function reindexNames() {
                     layoutContainer.find('.row-block').each(function(rowIndex) {
+                        $(this).find('input[name*="[layout]"], select[name*="[layout]"]').val($(this).data('layout'));
                         $(this).find('[name*="tw_form_fields"]').each(function() {
-                            this.name = this.name.replace(/\[\d+\]/, '[' + rowIndex + ']');
+                            this.name = this.name.replace(/tw_form_fields\[.*?\]/, 'tw_form_fields[' + rowIndex + ']');
                         });
                         $(this).find('.column-block').each(function(colIndex) {
                             $(this).find('.form-field-block').each(function(fieldIndex) {
                                 $(this).find('[name*="[columns]"]').each(function() {
-                                    this.name = this.name.replace(/\[columns\]\[\d+\]/, '[columns][' + colIndex + ']');
-                                    this.name = this.name.replace(/\[columns\]\[\d+\]\[\d+\]/, '[columns][' + colIndex + '][' + fieldIndex + ']');
+                                    this.name = this.name.replace(/\[columns\]\[.*?\]/, '[columns][' + colIndex + ']');
+                                    this.name = this.name.replace(/\[columns\]\[\d+\]\[.*?\]/, '[columns][' + colIndex + '][' + fieldIndex + ']');
                                 });
                             });
                         });
@@ -249,19 +269,19 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     const layout = $(this).data('layout');
                     const newRow = templates.find('#template-row-' + layout).clone().removeAttr('id');
                     const rowIndex = getUniqueIndex();
-                    newRow.find('[name*="__ROW_INDEX__"]').each(function() { this.name = this.name.replace('__ROW_INDEX__', rowIndex); });
+                    
+                    newRow.append('<input type="hidden" name="tw_form_fields[' + rowIndex + '][layout]" value="' + layout + '">');
+                    newRow.find('[name*="__ROW_INDEX__"]').each(function() { this.name = this.name.replace(/__ROW_INDEX__/g, rowIndex); });
+                    
                     layoutContainer.append(newRow);
                     initSortables();
+                    reindexNames();
                 });
 
                 layoutContainer.on('click', '.add-field-to-col', function() {
                     const column = $(this).closest('.column-block');
                     const newField = templates.find('#template-field').clone().removeAttr('id');
-                    const rowIndex = getUniqueIndex();
-                    newField.find('[name*="__ROW_INDEX__"]').each(function() {
-                        this.name = this.name.replace('__ROW_INDEX__', rowIndex).replace('__COL_INDEX__', '0').replace('__FIELD_INDEX__', '0');
-                        $(this).prop('disabled', false);
-                    });
+                    newField.find('[name*="__INDEX__"]').each(function() { $(this).prop('disabled', false); });
                     newField.insertBefore($(this));
                     reindexNames();
                 });
