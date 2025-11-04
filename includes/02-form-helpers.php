@@ -8,48 +8,6 @@ if ( ! defined( 'WPINC' ) ) {
 // == REUSABLE HELPER FUNCTIONS FOR FORMS
 // =============================================================================
 
-if ( ! function_exists( 'tw_forms_process_tags' ) ) {
-    /**
-     * Processes a string (like an email subject or body) and replaces all merge tags with their corresponding values.
-     *
-     * @param string   $content         The string containing merge tags like [field_label].
-     * @param array    $data_map        An associative array of submitted data, mapping 'Field Label' => 'Submitted Value'.
-     * @param WP_Post  $form_post       The post object for the form being processed.
-     * @param string   $all_fields_html A pre-formatted HTML string of all submitted fields.
-     * @return string The processed string with all tags replaced.
-     */
-    function tw_forms_process_tags( $content, $data_map, $form_post, $all_fields_html ) {
-        if ( empty( $content ) || ! is_string( $content ) ) {
-            return $content;
-        }
-
-        // --- 1. Process Utility and Magic Tags ---
-        $utility_replacements = [
-            '[all_fields]'      => $all_fields_html,
-            '[form_name]'       => get_the_title( $form_post ),
-            '[page_url]'        => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( $_SERVER['HTTP_REFERER'] ) : '',
-            '[user_ip]'         => $_SERVER['REMOTE_ADDR'] ?? 'Unknown',
-            '[submission_date]' => wp_date( get_option( 'date_format' ), time() ),
-            '[submission_time]' => wp_date( get_option( 'time_format' ), time() ),
-        ];
-
-        foreach ( $utility_replacements as $tag => $value ) {
-            $content = str_replace( $tag, $value, $content );
-        }
-
-        // --- 2. Process Field-Specific Tags ---
-        if ( ! empty( $data_map ) && is_array( $data_map ) ) {
-            foreach ( $data_map as $label => $value ) {
-                // For use in HTML emails, convert newlines to <br> and escape the value.
-                $html_safe_value = nl2br( esc_html( $value ) );
-                $content = str_replace( '[' . $label . ']', $html_safe_value, $content );
-            }
-        }
-
-        return $content;
-    }
-}
-
 if ( ! function_exists('verify_recaptcha_v3') ) {
     function verify_recaptcha_v3($token) {
         $recaptcha_options = get_option('my_recaptcha_settings', []);
@@ -91,11 +49,37 @@ if ( ! function_exists('is_email_blacklisted') ) {
 }
 
 if ( ! function_exists('log_form_submission_to_pods') ) {
-    function log_form_submission_to_pods($data) {
+    /**
+     * Logs form submission data to a 'messages' Pod.
+     * Now also saves a structured array of the data for cleaner display.
+     *
+     * @param array $data Basic data for the Pod (name, email, etc.).
+     * @param array $data_map Associative array of all submitted fields ('Label' => 'Value').
+     */
+    function log_form_submission_to_pods( $data, $data_map = [] ) {
         if ( !function_exists('pods') ) { return; }
+        
         $pods = pods('messages');
-        $pod_data = [ 'post_title' => 'Submission from ' . $data['messenger_name'] . ' on ' . date('Y-m-d H:i:s'), 'post_status' => 'publish', 'messenger_name' => $data['messenger_name'], 'phone' => $data['phone'], 'email' => $data['email'], 'message' => $data['message'], 'form_source' => $data['form_source'], 'entry_status' => 'Unread', 'user_ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'Unknown' ];
-        $pods->add($pod_data);
+        
+        $pod_data = [ 
+            'post_title'      => 'Submission from ' . $data['messenger_name'] . ' on ' . date('Y-m-d H:i:s'), 
+            'post_status'     => 'publish', 
+            'messenger_name'  => $data['messenger_name'], 
+            'phone'           => $data['phone'], 
+            'email'           => $data['email'], 
+            'message'         => $data['message'], 
+            'form_source'     => $data['form_source'], 
+            'entry_status'    => 'Unread', 
+            'user_ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'Unknown' 
+        ];
+        
+        // The add() method returns the new post ID. We capture it.
+        $new_message_id = $pods->add($pod_data);
+        
+        // If the post was created and we have our structured data map, save it as post meta.
+        if ( $new_message_id && ! empty( $data_map ) && is_array( $data_map ) ) {
+            update_post_meta( $new_message_id, '_tw_form_submitted_data', $data_map );
+        }
     }
 }
 
@@ -110,19 +94,7 @@ if ( ! function_exists('validate_and_format_phone_number') ) {
     }
 }
 
-
-// =============================================================================
-// == LEGACY EMAIL FUNCTIONS (DEPRECATED)
-// =============================================================================
-// The functions below are part of the old, hardcoded email system. They are
-// being replaced by the new dynamic template system and will be removed in a
-// future version of the plugin.
-// =============================================================================
-
 if (!function_exists('send_custom_admin_notification')) {
-    /**
-     * @deprecated 2.5.0 This function is deprecated. Use the new per-form email template system.
-     */
     function send_custom_admin_notification($to, $template_key, $form_data, $submitted_data_string) {
         if (empty($to)) {
             return true; // Don't try to send if no recipient is set
@@ -175,9 +147,6 @@ if (!function_exists('send_custom_admin_notification')) {
 }
 
 if (!function_exists('send_user_confirmation_email')) {
-    /**
-     * @deprecated 2.5.0 This function is deprecated. Use the new per-form email template system.
-     */
     function send_user_confirmation_email($user_email, $user_name, $form_source, $submitted_data) {
         $templates = get_option('my_form_email_templates', []);
         $subject = $templates['subject'] ?? 'Thank you for your submission!';
