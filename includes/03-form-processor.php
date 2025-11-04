@@ -201,6 +201,7 @@ if ( ! function_exists('tw_forms_print_layout_css') ) {
             .tw-form-field-wrapper input[type="text"], .tw-form-field-wrapper input[type="email"], .tw-form-field-wrapper input[type="tel"], .tw-form-field-wrapper textarea { width: 100%; padding: 12px; box-sizing: border-box; }
             .tw-checkbox-group label { font-weight: normal; margin-bottom: 5px; }
             .tw-checkbox-group input { margin-right: 8px; }
+            .tw-field-type-submit { margin-top: 10px; } 
         </style>
         <?php
         $css_printed = true;
