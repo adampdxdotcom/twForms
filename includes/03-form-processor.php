@@ -1,10 +1,10 @@
 <?php
 /**
  * Handles the universal [tw_form] shortcode, layout rendering, and processing.
- * Includes placeholder text, default submit value, and improved error styling.
+ * Renders Dropdown and Radio Button Group field types.
  *
  * @package TW_Forms
- * @version 2.3.0
+ * @version 2.4.0
  */
 
 // If this file is called directly, abort.
@@ -116,6 +116,25 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                                             <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
                                             <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" rows="5" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>><?php echo esc_textarea( $repop_value ); ?></textarea>
                                             <?php break;
+                                        case 'dropdown':
+                                            $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); ?>
+                                            <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <select id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>"<?php echo $required_html; ?>>
+                                                <option value="">-- Select an Option --</option>
+                                                <?php foreach ($options as $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?>
+                                                    <option value="<?php echo esc_attr($option_label); ?>" <?php selected($repop_value, $option_label); ?>><?php echo esc_html($option_label); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <?php break;
+                                        case 'radio_group':
+                                            $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); $cols = intval($field['cols'] ?? 1); ?>
+                                            <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <div class="tw-radio-group" style="columns: <?php echo $cols; ?>; -webkit-columns: <?php echo $cols; ?>; -moz-columns: <?php echo $cols; ?>;">
+                                            <?php foreach ($options as $opt_idx => $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?>
+                                                <label><input type="radio" name="<?php echo $field_name; ?>" value="<?php echo esc_attr($option_label); ?>" <?php checked($repop_value, $option_label); ?>> <?php echo esc_html($option_label); ?></label><br>
+                                            <?php endforeach; ?>
+                                            </div>
+                                            <?php break;
                                         case 'checkbox_group':
                                             $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); $cols = intval($field['cols'] ?? 1); ?>
                                             <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
@@ -154,8 +173,9 @@ if ( ! function_exists('tw_forms_print_layout_css') ) {
             .tw-form-col { flex: 1 1 0; min-width: 0; }
             .tw-form-col-2 { flex-basis: calc(50% - 10px); } .tw-form-col-3 { flex-basis: calc(33.33% - 14px); } .tw-form-col-4 { flex-basis: calc(25% - 15px); }
             .tw-form-field-wrapper label { display: block; margin-bottom: 8px; font-weight: bold; }
-            .tw-form-field-wrapper input[type="text"], .tw-form-field-wrapper input[type="email"], .tw-form-field-wrapper input[type="tel"], .tw-form-field-wrapper textarea { width: 100%; padding: 12px; box-sizing: border-box; }
-            .tw-checkbox-group label { font-weight: normal; margin-bottom: 5px; } .tw-checkbox-group input { margin-right: 8px; }
+            .tw-form-field-wrapper input[type="text"], .tw-form-field-wrapper input[type="email"], .tw-form-field-wrapper input[type="tel"], .tw-form-field-wrapper textarea, .tw-form-field-wrapper select { width: 100%; padding: 12px; box-sizing: border-box; }
+            .tw-checkbox-group label, .tw-radio-group label { font-weight: normal; margin-bottom: 5px; display: block; } 
+            .tw-checkbox-group input, .tw-radio-group input { margin-right: 8px; }
             .tw-field-type-submit { margin-top: 10px; }
             .tw-form-section-header { margin-top: 20px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #ddd; }
             .tw-form-html-block p:first-child { margin-top: 0; } .tw-form-html-block p:last-child { margin-bottom: 0; }
