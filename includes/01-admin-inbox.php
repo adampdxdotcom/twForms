@@ -103,11 +103,38 @@ if ( ! function_exists( 'render_message_detail_view' ) ) {
         $entry_id = isset($_GET['entry_id']) ? intval($_GET['entry_id']) : 0; if (!$entry_id) { wp_die('Invalid entry ID.'); } 
         $pod = pods('messages', $entry_id); if (!$pod->exists()) { wp_die('Entry not found.'); }
         if ($pod->field('entry_status') === 'Unread' && $pod->field('post_status') === 'publish') { $pod->save('entry_status', 'Read'); }
+        
+        // --- Get structured data for new display format ---
+        $submitted_data = get_post_meta( $pod->id(), '_tw_form_submitted_data', true );
+
+        // --- Fallback for old data format ---
         $raw_message = $pod->field('message'); $user_message = $raw_message; $auto_data = ''; $parts = explode("\n\n---\n\n", $raw_message, 2); 
         if (count($parts) === 2) { $user_message = $parts[0]; $auto_data = $parts[1]; }
         $notes = $pod->field('notes'); if ( is_array($notes) ) { $notes = ''; }
         ?>
-        <style>.message-viewer-wrap{display:flex;gap:20px}.message-main-content{flex:1}.message-sidebar{width:280px}.postbox .inside{padding:15px}.postbox h2.hndle{font-size:14px;padding:8px 12px}.message-content{white-space:pre-wrap;font-size:14px;line-height:1.6}.sidebar-actions a,.sidebar-actions span{display:block;padding:5px 0;text-decoration:none}.sidebar-actions span{color:#888}.sender-info-header{background-color:#f6f7f7;padding:10px 15px;border-bottom:1px solid #ddd}.sender-info-header p{margin:0 0 8px;font-size:14px}.message-content hr{margin:20px 0;border:0;border-top:1px solid #eee}.quick-reply-form textarea{width:100%;min-height:150px;margin-bottom:10px}.quick-reply-form .description{font-style:italic;color:#666}.notes-history{margin-top:20px}.note-item{background-color:#fdfaf1;border-left:3px solid #f1c40f;padding:15px;margin-bottom:15px}.note-item p{margin:0}.blacklist-button{display:inline-block;text-decoration:none;background:#a00;color:#fff!important;padding:4px 8px;border-radius:3px;font-size:12px;margin-left:10px;vertical-align:middle}.blacklist-button:hover{background:#c00}</style>
+        <style>
+            .message-viewer-wrap{display:flex;gap:20px}
+            .message-main-content{flex:1}
+            .message-sidebar{width:280px}
+            .postbox .inside{padding:15px}
+            .postbox h2.hndle{font-size:14px;padding:8px 12px}
+            .message-content{white-space:pre-wrap;font-size:14px;line-height:1.6}
+            .sidebar-actions a,.sidebar-actions span{display:block;padding:5px 0;text-decoration:none}
+            .sidebar-actions span{color:#888}
+            .sender-info-header{background-color:#f6f7f7;padding:10px 15px;border-bottom:1px solid #ddd}
+            .sender-info-header p{margin:0 0 8px;font-size:14px}
+            .quick-reply-form textarea{width:100%;min-height:150px;margin-bottom:10px}
+            .quick-reply-form .description{font-style:italic;color:#666}
+            .notes-history{margin-top:20px}
+            .note-item{background-color:#fdfaf1;border-left:3px solid #f1c40f;padding:15px;margin-bottom:15px}
+            .note-item p{margin:0}
+            .blacklist-button{display:inline-block;text-decoration:none;background:#a00;color:#fff!important;padding:4px 8px;border-radius:3px;font-size:12px;margin-left:10px;vertical-align:middle}
+            .blacklist-button:hover{background:#c00}
+            /* New styles for our submission data table */
+            table.tw-submission-data { width: 100%; border-collapse: collapse; }
+            table.tw-submission-data th, table.tw-submission-data td { padding: 12px 15px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+            table.tw-submission-data th { width: 25%; font-weight: bold; background-color: #fcfcfc; }
+        </style>
         <div class="wrap">
             <?php if (isset($_GET['blacklisted']) && $_GET['blacklisted'] === 'true'): ?><div class="notice notice-success is-dismissible"><p>Email address has been successfully added to the blacklist.</p></div><?php endif; ?>
             <?php if (isset($_GET['replied']) && $_GET['replied'] === 'true'): ?><div class="notice notice-success is-dismissible"><p>Reply sent and saved as a note.</p></div><?php endif; ?>
@@ -122,7 +149,26 @@ if ( ! function_exists( 'render_message_detail_view' ) ) {
                             </p>
                             <p style="margin-bottom:0"><strong>Phone:</strong> <?php echo esc_html($pod->field('phone')?:'N/A'); ?></p>
                         </div>
-                        <div class="inside"><div class="message-content"><?php echo nl2br(esc_html(trim($user_message)));if(!empty($auto_data)):?><hr><?php echo nl2br(esc_html(trim($auto_data)));endif;?></div></div>
+                        <div class="inside">
+                            <?php // --- NEW DISPLAY LOGIC --- ?>
+                            <?php if ( ! empty( $submitted_data ) && is_array( $submitted_data ) ) : ?>
+                                <table class="tw-submission-data">
+                                    <tbody>
+                                        <?php foreach ( $submitted_data as $label => $value ) : ?>
+                                            <?php if ( empty( $value ) ) continue; // Skip empty fields ?>
+                                            <tr>
+                                                <th><?php echo esc_html( $label ); ?></th>
+                                                <td><?php echo nl2br( esc_html( $value ) ); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php else : // Fallback for old entries ?>
+                                <div class="message-content">
+                                    <?php echo nl2br(esc_html(trim($user_message))); ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <?php if (!empty($notes)): ?><div class="notes-history"><h2>Notes & Reply History</h2><div class="note-item"><p><?php echo nl2br(esc_html($notes));?></p></div></div><?php endif; ?>
                     <div class="postbox quick-reply-form">
