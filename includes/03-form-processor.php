@@ -1,6 +1,6 @@
 <?php
 /**
- * Handles the new universal [tw_form] shortcode and form processing logic.
+ * Handles the universal [tw_form] shortcode and form processing logic.
  *
  * @package TW_Forms
  * @version 2.0.0
@@ -18,53 +18,35 @@ if ( ! defined( 'WPINC' ) ) {
 if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
 
     /**
-     * The new, single shortcode handler for [tw_form].
+     * The final, single shortcode handler for [tw_form].
      *
-     * It retrieves the form CPT based on the ID and renders it.
-     * For Phase 1, it only renders a placeholder. The visual builder will be added in Phase 2.
-     * It also handles the submission processing for all forms.
+     * It now reads the saved fields from the form builder and renders them dynamically.
      *
      * @param array $atts The attributes passed to the shortcode, e.g., [tw_form id="123"].
      * @return string The HTML for the form and status messages.
      */
     function tw_forms_universal_shortcode_handler( $atts ) {
         // --- 1. Sanitize the Shortcode Attributes ---
-        $atts = shortcode_atts( [
-            'id' => 0,
-        ], $atts, 'tw_form' );
-
+        $atts = shortcode_atts( [ 'id' => 0, ], $atts, 'tw_form' );
         $form_id = intval( $atts['id'] );
+        if ( ! $form_id ) return '<p style="color: red;">Error: Form ID is missing or invalid.</p>';
 
-        // If no valid ID is provided, don't render anything.
-        if ( ! $form_id ) {
-            return '<p style="color: red;">Error: Form ID is missing or invalid.</p>';
-        }
-
-        // --- 2. Retrieve the Form Post from the Database ---
+        // --- 2. Retrieve the Form Post and its Fields from the Database ---
         $form_post = get_post( $form_id );
-
-        // Check if the form exists and is the correct post type.
-        if ( ! $form_post || 'tw_form' !== get_post_type( $form_post ) ) {
-            return '<p style="color: red;">Error: Form not found.</p>';
-        }
+        if ( ! $form_post || 'tw_form' !== get_post_type( $form_post ) ) return '<p style="color: red;">Error: Form not found.</p>';
+        
+        $saved_fields = get_post_meta( $form_id, '_tw_form_fields', true );
 
         // --- 3. Handle Form Submission (if applicable) ---
         $status_message = '';
         $debug_message  = '';
         
-        // Check if this specific form was submitted.
-        // We will add a hidden field `tw_form_id` to our forms.
         if ( isset( $_POST['submit_tw_form'] ) && isset( $_POST['tw_form_id'] ) && intval( $_POST['tw_form_id'] ) === $form_id ) {
-            
-            // For now, the processing logic will just show a success message.
-            // In Phase 2, we will add full validation and processing here.
-            
-            // A simple nonce check for security
             if ( ! isset( $_POST['tw_form_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_nonce'], 'process_tw_form_' . $form_id ) ) {
                  $status_message = '<p style="color: red;">Security check failed. Please try again.</p>';
             } else {
-                // All processing will eventually go here.
-                // For now, just a placeholder success message.
+                // NOTE: Full processing logic (validation, emailing, saving) will be the very next step.
+                // For now, this confirms the dynamic form can be submitted.
                 $status_message = '<p style="color: green;">Thank you! Your submission has been received.</p>';
             }
         }
@@ -73,78 +55,73 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         ob_start();
         ?>
         <div class="tw-form-container">
-            
             <div id="tw-form-status-<?php echo esc_attr( $form_id ); ?>" class="form-status-message">
-                <?php echo $debug_message . $status_message; ?>
+                <?php echo $status_message; // We removed $debug_message for now ?>
             </div>
 
             <form method="post" action="" id="tw-form-<?php echo esc_attr( $form_id ); ?>">
                 
-                <?php // --- Security and Tracking Fields --- ?>
                 <input type="hidden" name="tw_form_id" value="<?php echo esc_attr( $form_id ); ?>">
                 <?php wp_nonce_field( 'process_tw_form_' . $form_id, 'tw_form_nonce' ); ?>
                 
-                <h2><?php echo esc_html( $form_post->post_title ); ?></h2>
-                <p><em>(This is a placeholder for Phase 1. The visual form builder will appear here in Phase 2.)</em></p>
+                <?php if ( ! empty( $saved_fields ) && is_array( $saved_fields ) ) : ?>
+                    <?php foreach ( $saved_fields as $index => $field ) : ?>
+                        <?php
+                        // Prepare variables for the field
+                        $field_type     = $field['type'] ?? 'text';
+                        $field_label    = $field['label'] ?? '';
+                        $is_required    = ! empty( $field['required'] );
+                        $field_id       = 'tw-field-' . esc_attr( $form_id ) . '-' . esc_attr( $index );
+                        $field_name     = 'tw_form_field[' . esc_attr( $index ) . ']';
+                        $required_html  = $is_required ? ' required' : '';
+                        $required_span  = $is_required ? ' <span style="color:red;">*</span>' : '';
+                        ?>
+                        <div class="tw-form-field-wrapper tw-field-type-<?php echo $field_type; ?>" style="margin-bottom: 20px;">
+                            <?php // Use a switch to render the correct HTML for each field type ?>
+                            <?php switch ( $field_type ) :
+                                case 'text':
+                                case 'email':
+                                case 'tel': ?>
+                                    <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                    <input type="<?php echo $field_type; ?>" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>>
+                                    <?php break; ?>
 
-                <?php // --- Placeholder Fields for Demonstration --- ?>
-                <div style="margin-bottom: 15px;">
-                    <label for="name_<?php echo esc_attr( $form_id ); ?>">Your Name</label><br>
-                    <input type="text" id="name_<?php echo esc_attr( $form_id ); ?>" name="your_name" style="width: 100%; padding: 12px;">
-                </div>
-                 <div style="margin-bottom: 15px;">
-                    <label for="email_<?php echo esc_attr( $form_id ); ?>">Your Email</label><br>
-                    <input type="email" id="email_<?php echo esc_attr( $form_id ); ?>" name="your_email" style="width: 100%; padding: 12px;">
-                </div>
+                                <?php case 'textarea': ?>
+                                    <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                    <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" rows="5" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>></textarea>
+                                    <?php break; ?>
+                                
+                                <?php case 'checkbox': ?>
+                                    <label for="<?php echo $field_id; ?>">
+                                        <input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" value="1"<?php echo $required_html; ?>>
+                                        <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?>
+                                    </label>
+                                    <?php break; ?>
+                                
+                                <?php case 'submit': ?>
+                                    <button type="submit" name="submit_tw_form" class="custom-form-submit-button"><?php echo esc_html( $field_label ?: 'Submit' ); ?></button>
+                                    <?php break; ?>
 
-                <?php // The actual form fields will be dynamically generated here in Phase 2 ?>
-
-                <div style="margin-top: 25px;">
-                    <button type="submit" name="submit_tw_form" class="custom-form-submit-button">Submit Form</button>
-                </div>
-
+                            <?php endswitch; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else : ?>
+                    <p>This form has no fields yet. Please add fields in the form editor.</p>
+                <?php endif; ?>
             </form>
         </div>
         <?php
         
-        // The reCAPTCHA script loader can remain as it will be needed later.
         enqueue_form_spam_protection_scripts();
-
         return ob_get_clean();
     }
-    // Register the new universal shortcode
     add_shortcode( 'tw_form', 'tw_forms_universal_shortcode_handler' );
-
 }
 
 
 // =============================================================================
-// == RECAPTCHA AND HELPER SCRIPTS (Can be kept as they are)
+// == RECAPTCHA AND HELPER SCRIPTS (No changes needed here for now)
 // =============================================================================
-
-if ( ! function_exists('enqueue_form_spam_protection_scripts') ) {
-    function enqueue_form_spam_protection_scripts() {
-        static $scripts_enqueued = false;
-        if ($scripts_enqueued) { return; }
-        $recaptcha_options = get_option('my_recaptcha_settings', []);
-        if ( !empty($recaptcha_options['disable']) ) { return; }
-        $site_key = $recaptcha_options['site_key'] ?? '';
-        if (!empty($site_key)) {
-            wp_enqueue_script('google-recaptcha', 'https://www.google.com/recaptcha/api.js?render=' . esc_attr($site_key), [], null, true);
-            $scripts_enqueued = true;
-        }
-    }
-}
-
-if ( ! function_exists('add_recaptcha_form_submission_script') ) {
-    function add_recaptcha_form_submission_script() {
-        // This function will need to be rewritten in Phase 2 to work with the dynamic forms.
-        // For now, it's okay to leave it, but it will not be functional.
-    }
-    add_action('wp_footer', 'add_recaptcha_form_submission_script');
-}
-
-if ( ! function_exists('custom_recaptcha_badge_styles') ) {
-    function custom_recaptcha_badge_styles() { echo '<style>.grecaptcha-badge { left: 15px !important; right: auto !important; }</style>'; }
-    add_action('wp_head', 'custom_recaptcha_badge_styles');
-}
+if ( ! function_exists('enqueue_form_spam_protection_scripts') ) { function enqueue_form_spam_protection_scripts() { static $s=false; if($s){return;} $o=get_option('my_recaptcha_settings',[]); if(!empty($o['disable'])){return;} $k=$o['site_key']??''; if(!empty($k)){wp_enqueue_script('google-recaptcha','https://www.google.com/recaptcha/api.js?render='.esc_attr($k),[],null,true);$s=true;}}}
+if ( ! function_exists('add_recaptcha_form_submission_script') ) { function add_recaptcha_form_submission_script() { /* This will be re-implemented later */ } add_action('wp_footer', 'add_recaptcha_form_submission_script'); }
+if ( ! function_exists('custom_recaptcha_badge_styles') ) { function custom_recaptcha_badge_styles() { echo '<style>.grecaptcha-badge { left: 15px !important; right: auto !important; }</style>'; } add_action('wp_head', 'custom_recaptcha_badge_styles');}
