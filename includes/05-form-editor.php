@@ -121,39 +121,30 @@ if ( ! function_exists( 'tw_forms_render_field_partial' ) ) {
 
 if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
     function tw_forms_render_admin_notification_mb( $post ) {
-        // Main email settings
         $settings = get_post_meta( $post->ID, '_tw_form_admin_email', true );
         $settings = is_array( $settings ) ? $settings : [];
         $recipients_fallback = get_post_meta( $post->ID, '_tw_form_recipients', true );
         $to       = $settings['to'] ?? $recipients_fallback;
         $subject  = $settings['subject'] ?? 'New Submission from [form_name]';
         $message  = $settings['message'] ?? '<p>A new entry has been submitted via the [form_name] form on your website.</p>[all_fields]';
-        
-        // Conditional notification rules
-        $rules = get_post_meta( $post->ID, '_tw_form_conditional_rules', true );
-        $rules = is_array($rules) ? $rules : [];
+        $rules    = get_post_meta( $post->ID, '_tw_form_conditional_rules', true );
+        $rules    = is_array($rules) ? $rules : [];
 
-        // Get all available fields from the form builder to pass to our JS and PHP rendering
         $form_fields_data = [];
         $saved_layout = get_post_meta( $post->ID, '_tw_form_layout', true );
         if ( is_array( $saved_layout ) ) {
             foreach ( $saved_layout as $row ) {
                 foreach ( $row['columns'] as $column ) {
                     foreach ( $column as $field ) {
-                        if ( ! empty( $field['label'] ) && in_array( $field['type'], [ 'text', 'dropdown', 'radio_group', 'checkbox_group' ] ) ) {
-                            $form_fields_data[ $field['label'] ] = [
-                                'type'    => $field['type'],
-                                'options' => $field['options'] ?? '',
-                            ];
+                        if ( ! empty( $field['label'] ) ) { // Get all fields with labels
+                            $form_fields_data[ $field['label'] ] = ['type' => $field['type'], 'options' => $field['options'] ?? '',];
                         }
                     }
                 }
             }
         }
         ?>
-        <script type="text/javascript">
-            window.twFormFieldData = <?php echo json_encode( $form_fields_data ); ?>;
-        </script>
+        <script type="text/javascript"> window.twFormFieldData = <?php echo json_encode( $form_fields_data ); ?>; </script>
 
         <div class="tw-email-settings-wrapper">
             <div class="email-settings-main">
@@ -162,9 +153,7 @@ if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
                 <div class="setting-row"><label for="admin-email-message"><strong>Message</strong></label>
                     <?php wp_editor( $message, 'admin-email-message', ['textarea_name' => 'tw_form_admin_email[message]', 'media_buttons' => false, 'textarea_rows' => 8, 'tinymce' => [ 'toolbar1' => 'bold,italic,bullist,numlist,link,unlink,undo,redo' ]] ); ?>
                 </div>
-                
                 <hr>
-                
                 <h3>Conditional Notifications</h3>
                 <p class="description">Send additional notifications based on user input. For example, send a notice to marketing if a user checks "Sign up for newsletter".</p>
                 <div id="conditional-rules-container">
@@ -179,11 +168,10 @@ if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
             <div class="email-settings-sidebar">
                 <p>This email is an alert that a new message is waiting in your site's inbox. All replies should be sent from the plugin's messaging system.</p>
                 <hr>
-                <strong>Available Tags</strong><p>Use these tags in your subject or message. They will be replaced with form data.</p>
+                <strong>Available Tags</strong><p>Use these tags in your subject or message.</p>
                 <div class="tags-list"><code>[all_fields]</code> <code>[form_name]</code> <code>[page_url]</code> <code>[user_ip]</code> <code>[submission_date]</code> <code>[submission_time]</code><p>You can also use tags for any field by wrapping its label in brackets, e.g., <code>[Your Name]</code>.</p></div>
             </div>
         </div>
-
         <div id="conditional-rule-template" style="display: none;">
              <?php tw_forms_render_conditional_rule_partial( '__INDEX__', [], $form_fields_data ); ?>
         </div>
@@ -194,6 +182,7 @@ if ( ! function_exists( 'tw_forms_render_admin_notification_mb' ) ) {
 if ( ! function_exists( 'tw_forms_render_conditional_rule_partial' ) ) {
     function tw_forms_render_conditional_rule_partial( $index, $rule_data, $form_fields ) {
         $field_label = $rule_data['field'] ?? '';
+        $operator    = $rule_data['operator'] ?? 'is';
         $value       = $rule_data['value'] ?? '';
         $recipient   = $rule_data['recipient'] ?? '';
         $field_type  = isset( $form_fields[ $field_label ] ) ? $form_fields[ $field_label ]['type'] : 'text';
@@ -206,28 +195,12 @@ if ( ! function_exists( 'tw_forms_render_conditional_rule_partial' ) ) {
                     <option value="<?php echo esc_attr( $label ); ?>" <?php selected( $field_label, $label ); ?>><?php echo esc_html( $label ); ?></option>
                 <?php endforeach; ?>
             </select>
-            <span>IS</span>
-            <span class="is-input-wrapper">
-                <?php if ( $field_type === 'checkbox_group' ) : ?>
-                    <select name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][value]">
-                        <option value="checked" <?php selected( $value, 'checked' ); ?>>Checked</option>
-                        <option value="not_checked" <?php selected( $value, 'not_checked' ); ?>>Not Checked</option>
-                    </select>
-                <?php elseif ( $field_type === 'dropdown' || $field_type === 'radio_group' ) : ?>
-                    <select name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][value]">
-                        <option value="">-- Select an Option --</option>
-                        <?php $options = explode( "\n", str_replace( "\r", "", $form_fields[ $field_label ]['options'] ) ); ?>
-                        <?php foreach ( $options as $option ) : $option = trim( $option ); if( empty( $option ) ) continue; ?>
-                            <option value="<?php echo esc_attr( $option ); ?>" <?php selected( $value, $option ); ?>><?php echo esc_html( $option ); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                <?php else : ?>
-                    <input type="text" name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][value]" value="<?php echo esc_attr( $value ); ?>" placeholder="e.g., Yes">
-                <?php endif; ?>
-            </span>
+            <select name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][operator]" class="conditional-operator-select"></select>
+            <span class="conditional-value-wrapper"></span>
             <span>THEN send to</span>
             <input type="email" name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][recipient]" value="<?php echo esc_attr( $recipient ); ?>" placeholder="email@example.com">
             <a href="#" class="remove-conditional-rule" title="Remove Rule">×</a>
+            <input type="hidden" class="conditional-value-data" value="<?php echo esc_attr( $value ); ?>">
         </div>
         <?php
     }
@@ -316,7 +289,7 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
         if ( isset( $_POST['tw_form_conditional_rules'] ) && is_array( $_POST['tw_form_conditional_rules'] ) ) {
             foreach ( $_POST['tw_form_conditional_rules'] as $rule_data ) {
                 if ( ! empty( $rule_data['field'] ) && ! empty( $rule_data['recipient'] ) && is_email( $rule_data['recipient'] ) ) {
-                    $sanitized_rules[] = ['field' => sanitize_text_field($rule_data['field']),'value' => sanitize_text_field($rule_data['value']),'recipient' => sanitize_email($rule_data['recipient']),];
+                    $sanitized_rules[] = ['field' => sanitize_text_field($rule_data['field']), 'operator' => sanitize_key($rule_data['operator']), 'value' => sanitize_text_field($rule_data['value'] ?? ''), 'recipient' => sanitize_email($rule_data['recipient']),];
                 }
             }
         }
@@ -345,13 +318,13 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
         ?>
         <script type="text/javascript">
             jQuery(document).ready(function($) {
+                // --- FORM BUILDER JS ---
                 const layoutContainer = $('#layout-container');
                 const templates = $('#tw-form-templates');
                 function getUniqueIndex() { return new Date().getTime(); }
                 function updateEmptyState() { if (layoutContainer.find('.row-block').length === 0) { layoutContainer.html('<p class="empty-state">No rows yet. Click "Add Row" to begin building your form.</p>'); } else { layoutContainer.find('.empty-state').remove(); } }
                 function reindexNames() {
                     layoutContainer.find('.row-block').each(function(rowIndex) {
-                        $(this).find('input[name*="[layout]"], select[name*="[layout]"]').val($(this).data('layout'));
                         $(this).find('[name*="tw_form_fields"]').each(function() { this.name = this.name.replace(/tw_form_fields\[.*?\]/, 'tw_form_fields[' + rowIndex + ']'); });
                         $(this).find('.column-block').each(function(colIndex) {
                             $(this).find('.form-field-block').each(function(fieldIndex) {
@@ -367,70 +340,95 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     layoutContainer.sortable({ handle: '.row-header', placeholder: 'row-placeholder', update: reindexNames }).disableSelection();
                     layoutContainer.find('.column-block').sortable({ handle: '.field-header', placeholder: 'field-placeholder', connectWith: '.column-block', update: reindexNames }).disableSelection();
                 }
-                $('.add-row-button').on('click', function() { updateEmptyState(); const layout = $(this).data('layout'); const newRow = templates.find('#template-row-' + layout).clone().removeAttr('id'); const rowIndex = getUniqueIndex(); newRow.append('<input type="hidden" name="tw_form_fields[' + rowIndex + '][layout]" value="' + layout + '">'); newRow.find('[name*="__ROW_INDEX__"]').each(function() { this.name = this.name.replace(/__ROW_INDEX__/g, rowIndex); }); layoutContainer.append(newRow); initSortables(); reindexNames(); });
+                $('.add-row-button').on('click', function() { updateEmptyState(); const layout = $(this).data('layout'); const newRow = templates.find('#template-row-' + layout).clone().removeAttr('id'); const rowIndex = getUniqueIndex(); newRow.find('[name*="__ROW_INDEX__"]').each(function() { this.name = this.name.replace(/__ROW_INDEX__/g, rowIndex); }); layoutContainer.append(newRow); initSortables(); reindexNames(); });
                 layoutContainer.on('click', '.add-field-to-col', function() { const column = $(this).closest('.column-block'); const newField = templates.find('#template-field').clone().removeAttr('id'); newField.find('[disabled]').prop('disabled', false); newField.insertBefore($(this)); reindexNames(); newField.find('.field-type-select').trigger('change'); });
                 layoutContainer.on('click', '.delete-row', function(e) { e.preventDefault(); if (confirm('Delete this entire row?')) { $(this).closest('.row-block').remove(); updateEmptyState(); reindexNames(); } });
                 layoutContainer.on('click', '.delete-field', function(e) { e.preventDefault(); if (confirm('Delete this field?')) { $(this).closest('.form-field-block').remove(); reindexNames(); } });
-                
                 layoutContainer.on('change', '.field-type-select', function() {
                     const fieldBlock = $(this).closest('.form-field-block'); const selectedType = $(this).val(); fieldBlock.find('.field-type-label').text($(this).find('option:selected').text());
-                    const isInputField = ['text', 'email', 'tel', 'textarea', 'dropdown', 'radio_group', 'checkbox_group'].includes(selectedType); const hasPlaceholder = ['text', 'email', 'tel', 'textarea'].includes(selectedType); const hasOptions = ['dropdown', 'radio_group', 'checkbox_group'].includes(selectedType);
-                    fieldBlock.find('.field-label-panel').toggle(isInputField || selectedType === 'section_header' || selectedType === 'submit');
+                    const fieldHasLabel = ['text', 'email', 'tel', 'textarea', 'dropdown', 'radio_group', 'checkbox_group', 'section_header', 'submit'].includes(selectedType);
+                    const hasPlaceholder = ['text', 'email', 'tel', 'textarea'].includes(selectedType);
+                    const hasOptions = ['dropdown', 'radio_group', 'checkbox_group'].includes(selectedType);
+                    fieldBlock.find('.field-label-panel').toggle(fieldHasLabel);
                     fieldBlock.find('.placeholder-panel').toggle(hasPlaceholder);
                     fieldBlock.find('.html-content-panel').toggle(selectedType === 'html_block');
-                    fieldBlock.find('.setting-row-options').toggle(isInputField);
+                    fieldBlock.find('.setting-row-options').toggle(fieldHasLabel && selectedType !== 'section_header' && selectedType !== 'submit');
                     fieldBlock.find('.confirm-email-option').toggle(selectedType === 'email');
-                    fieldBlock.find('.hide-label-option').toggle(selectedType === 'checkbox_group' || selectedType === 'radio_group');
+                    fieldBlock.find('.hide-label-option').toggle(fieldHasLabel && selectedType !== 'section_header' && selectedType !== 'submit');
                     fieldBlock.find('.options-panel').toggle(hasOptions);
                     fieldBlock.find('.multi-column-option').toggle(selectedType === 'checkbox_group' || selectedType === 'radio_group');
                 });
-                
                 initSortables();
                 layoutContainer.find('.field-type-select').trigger('change');
 
-                // --- Conditional Notifications JS ---
+                // --- CONDITIONAL NOTIFICATIONS JS ---
                 const rulesContainer = $('#conditional-rules-container');
-                $('#add-conditional-rule').on('click', function(e) {
-                    e.preventDefault();
-                    const template = $('#conditional-rule-template').html();
-                    const newIndex = new Date().getTime();
-                    const newRule = template.replace(/__INDEX__/g, newIndex);
-                    rulesContainer.append(newRule);
-                });
+                $('#add-conditional-rule').on('click', function(e) { e.preventDefault(); const template = $('#conditional-rule-template').html(); const newIndex = new Date().getTime(); const newRule = template.replace(/__INDEX__/g, newIndex); rulesContainer.append(newRule).find('.conditional-rule-block:last-child .conditional-field-select').trigger('change'); });
                 rulesContainer.on('click', '.remove-conditional-rule', function(e) { e.preventDefault(); if (confirm('Remove this rule?')) { $(this).closest('.conditional-rule-block').remove(); } });
-                
-                // --- Smarter Conditional Logic ---
-                rulesContainer.on('change', '.conditional-field-select', function() {
-                    const select = $(this);
-                    const wrapper = select.closest('.conditional-rule-block').find('.is-input-wrapper');
-                    const fieldName = select.val();
-                    const nameBase = select.attr('name').replace('[field]', '[value]');
-                    
-                    if (window.twFormFieldData && window.twFormFieldData[fieldName]) {
-                        const fieldData = window.twFormFieldData[fieldName];
-                        let newHtml = '';
 
-                        if (fieldData.type === 'checkbox_group') {
-                            newHtml = `<select name="${nameBase}"><option value="checked">Checked</option><option value="not_checked">Not Checked</option></select>`;
-                        } else if (fieldData.type === 'dropdown' || fieldData.type === 'radio_group') {
-                            const options = fieldData.options.split('\n').map(opt => opt.trim()).filter(opt => opt);
-                            newHtml = `<select name="${nameBase}"><option value="">-- Select --</option>`;
-                            options.forEach(opt => { newHtml += `<option value="${$('<div/>').text(opt).html()}">${$('<div/>').text(opt).html()}</option>`; });
-                            newHtml += `</select>`;
+                function updateConditionalRule(ruleBlock) {
+                    const fieldSelect = ruleBlock.find('.conditional-field-select');
+                    const operatorSelect = ruleBlock.find('.conditional-operator-select');
+                    const valueWrapper = ruleBlock.find('.conditional-value-wrapper');
+                    const valueData = ruleBlock.find('.conditional-value-data').val();
+                    const fieldName = fieldSelect.val();
+                    const nameBase = fieldSelect.attr('name').replace('[field]', '');
+
+                    const fieldInfo = (window.twFormFieldData && window.twFormFieldData[fieldName]) ? window.twFormFieldData[fieldName] : { type: 'text', options: '' };
+                    const fieldType = fieldInfo.type;
+
+                    const operators = {
+                        text: { 'is': 'is', 'is_not': 'is not', 'is_empty': 'is empty', 'is_not_empty': 'is not empty', 'contains': 'contains' },
+                        choice: { 'is': 'is', 'is_not': 'is not' },
+                        checkbox: { 'is_checked': 'is checked', 'is_not_checked': 'is not checked' }
+                    };
+                    
+                    let currentOperators;
+                    if (fieldType === 'checkbox_group') currentOperators = operators.checkbox;
+                    else if (fieldType === 'dropdown' || fieldType === 'radio_group') currentOperators = operators.choice;
+                    else currentOperators = operators.text;
+
+                    operatorSelect.empty();
+                    $.each(currentOperators, (key, label) => { operatorSelect.append($('<option>', { value: key, text: label })); });
+
+                    const currentOperator = operatorSelect.val() || 'is';
+                    const needsValue = !['is_empty', 'is_not_empty', 'is_checked', 'is_not_checked'].includes(currentOperator);
+                    
+                    if (needsValue) {
+                        let valueInputHtml = '';
+                        if (fieldType === 'dropdown' || fieldType === 'radio_group') {
+                            const options = fieldInfo.options.split('\n').map(opt => opt.trim()).filter(opt => opt);
+                            valueInputHtml = `<select name="${nameBase}[value]"><option value="">-- Select --</option>`;
+                            options.forEach(opt => {
+                                const selected = (opt === valueData) ? 'selected' : '';
+                                valueInputHtml += `<option value="${$('<div/>').text(opt).html()}" ${selected}>${$('<div/>').text(opt).html()}</option>`;
+                            });
+                            valueInputHtml += `</select>`;
                         } else {
-                            newHtml = `<input type="text" name="${nameBase}" placeholder="e.g., Yes">`;
+                            valueInputHtml = `<input type="text" name="${nameBase}[value]" value="${valueData}" placeholder="Enter value">`;
                         }
-                        wrapper.html(newHtml);
+                        valueWrapper.html(valueInputHtml).show();
                     } else {
-                        wrapper.html(`<input type="text" name="${nameBase}" placeholder="e.g., Yes">`);
+                        valueWrapper.empty().hide();
                     }
+                }
+
+                rulesContainer.on('change', '.conditional-field-select, .conditional-operator-select', function() {
+                    updateConditionalRule($(this).closest('.conditional-rule-block'));
+                });
+
+                // Initialize existing rules on page load
+                $('.conditional-rule-block').each(function() {
+                    const ruleBlock = $(this);
+                    const operator = ruleBlock.find('.conditional-value-data').data('operator'); // This would need to be saved
+                    updateConditionalRule(ruleBlock);
                 });
             });
         </script>
         <style>
             .tw-form-builder-wrapper { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; } #layout-container { border: 1px solid #ccd0d4; background: #fff; padding: 15px; min-height: 150px; } #layout-container .empty-state { color: #777; text-align: center; margin: 40px 0; font-size: 1.2em; } .builder-actions { margin-top: 15px; padding: 10px; background: #f9f9f9; border: 1px solid #ccd0d4; } .add-row-container { display: flex; align-items: center; gap: 10px; } .row-block { border: 1px solid #999; margin-bottom: 15px; background: #fdfdfd; } .row-header { display: flex; justify-content: space-between; align-items: center; background: #e0e0e0; padding: 5px 10px; cursor: move; border-bottom: 1px solid #ccc; } .row-header .row-label { font-weight: bold; } .row-columns { display: flex; gap: 10px; padding: 10px; } .column-block { flex: 1; border: 1px dashed #ccd0d4; background: #f9f9f9; min-height: 80px; padding: 10px; } .column-block[data-layout="50-50"] { flex-basis: 50%; } .column-block[data-layout="33-33-33"] { flex-basis: 33.33%; } .column-block[data-layout="25-25-25-25"] { flex-basis: 25%; } .column-block .add-field-to-col { width: 100%; margin-top: 5px; } .form-field-block { border: 1px solid #ccd0d4; margin-bottom: 10px; background: #fff; } .field-header { display: flex; justify-content: space-between; align-items: center; background: #f0f0f1; padding: 8px 12px; cursor: move; } .field-header .field-type-label { font-weight: 700; } .field-header .field-actions a { text-decoration: none; font-size: 1.4em; margin-left: 10px; } .field-settings { padding: 12px; } .field-settings .setting-row { margin-bottom: 10px; } .field-settings .setting-row-options label { display: inline-block; margin-right: 20px; } .field-settings label { display: block; margin-bottom: 5px; font-weight: 500; } .field-settings select, .field-settings input[type=text], .field-settings input[type=email], .field-settings textarea { width: 100%; } .row-placeholder, .field-placeholder{border:2px dashed #ccd0d4;background-color:#f0f8ff;margin-bottom:15px;box-sizing:border-box;}
             .tw-email-settings-wrapper { display: flex; gap: 20px; } .tw-email-settings-wrapper .email-settings-main { flex: 1; } .tw-email-settings-wrapper .email-settings-sidebar { flex-basis: 250px; background-color: #f8f9fa; border: 1px solid #ccd0d4; padding: 15px; } .tw-email-settings-wrapper .email-settings-sidebar strong { font-size: 1.1em; } .tw-email-settings-wrapper .email-settings-sidebar .tags-list { margin-top: 10px; } .tw-email-settings-wrapper .email-settings-sidebar code { background-color: #e0e0e0; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; } .tw-email-settings-wrapper .email-settings-sidebar p { margin-top: 5px; } .tw-email-settings-wrapper .setting-row { margin-bottom: 15px; } .tw-email-settings-wrapper .setting-row input[type="text"], .tw-email-settings-wrapper .setting-row input[type="email"] { width: 100%; }
-            .conditional-rule-block { display: flex; align-items: center; gap: 10px; background-color: #f0f0f1; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; } .conditional-rule-block span { font-style: italic; color: #555; } .conditional-rule-block select, .conditional-rule-block input { flex: 1; } .conditional-rule-block .remove-conditional-rule { font-size: 1.5em; text-decoration: none; color: #a00; }
+            .conditional-rule-block { display: flex; align-items: center; gap: 10px; background-color: #f0f0f1; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; } .conditional-rule-block span { font-style: italic; color: #555; } .conditional-rule-block select, .conditional-rule-block input { flex-grow: 1; } .conditional-rule-block .conditional-field-select { flex-basis: 20%; } .conditional-rule-block .conditional-operator-select { flex-basis: 15%; } .conditional-rule-block .conditional-value-wrapper { flex-basis: 20%; } .conditional-rule-block input[type="email"] { flex-basis: 25%; } .conditional-rule-block .remove-conditional-rule { font-size: 1.5em; text-decoration: none; color: #a00; flex-grow: 0; }
         </style>
         <?php
     }
