@@ -56,7 +56,7 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
 
                         // Generate a unique index for existing fields.
                         // Using the array index is fine here because PHP will re-key on save.
-                        $field_index = $index; 
+                        $field_index = $index;
                         ?>
                         <div class="form-field-block">
                             <div class="field-header">
@@ -188,8 +188,22 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
     /**
      * Enqueues and prints the necessary JavaScript for the form builder.
      */
-    function tw_forms_editor_enqueue_scripts( $hook_suffix ) {
-        if ( ! in_array( $hook_suffix, [ 'post.php', 'post-new.php' ] ) || 'tw_form' !== get_post_type() ) return;
+    function tw_forms_editor_enqueue_scripts() {
+        global $pagenow, $post;
+
+        // A much more reliable check for the correct admin screen.
+        $is_correct_screen = false;
+        if ( $pagenow === 'post-new.php' && isset( $_GET['post_type'] ) && $_GET['post_type'] === 'tw_form' ) {
+            $is_correct_screen = true; // We are on the "Add New Form" page.
+        } elseif ( $pagenow === 'post.php' && isset( $post ) && $post->post_type === 'tw_form' ) {
+            $is_correct_screen = true; // We are on the "Edit Form" page for an existing form.
+        }
+
+        // If we are not on the right screen, do nothing.
+        if ( ! $is_correct_screen ) {
+            return;
+        }
+
         wp_enqueue_script( 'jquery-ui-sortable' );
         ?>
         <script type="text/javascript">
@@ -219,12 +233,10 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
 
                 fieldsContainer.on('click', '.delete-field', function(e) { e.preventDefault(); if (confirm('Are you sure?')) { $(this).closest('.form-field-block').remove(); updateEmptyState(); } });
                 fieldsContainer.on('change', '.field-type-select', function() { $(this).closest('.form-field-block').find('.field-type-label').text($(this).find('option:selected').text()); });
-
             });
         </script>
         <style>.field-placeholder{border:2px dashed #ccd0d4;background-color:#f0f8ff;margin-bottom:10px;box-sizing:border-box;}</style>
         <?php
     }
-    add_action( 'admin_footer-post.php', 'tw_forms_editor_enqueue_scripts' );
-    add_action( 'admin_footer-post-new.php', 'tw_forms_editor_enqueue_scripts' );
+    add_action( 'admin_footer', 'tw_forms_editor_enqueue_scripts' ); // We can now use a simpler, more general hook.
 }
