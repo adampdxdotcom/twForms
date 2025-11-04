@@ -3,7 +3,7 @@
  * Handles the universal [tw_form] shortcode and form processing logic.
  *
  * @package TW_Forms
- * @version 2.0.0
+ * @version 2.0.1
  */
 
 // If this file is called directly, abort.
@@ -27,22 +27,27 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         
         $saved_fields = get_post_meta( $form_id, '_tw_form_fields', true );
         $status_message = '';
-        $submitted_values = []; // To repopulate form on error
+        $submitted_values = [];
 
-        // --- NEW: Full Submission Processing ---
+        // --- Full Submission Processing ---
         if ( isset( $_POST['submit_tw_form'] ) && isset( $_POST['tw_form_id'] ) && intval( $_POST['tw_form_id'] ) === $form_id ) {
             
-            // Nonce check
             if ( ! isset( $_POST['tw_form_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_nonce'], 'process_tw_form_' . $form_id ) ) {
                  $status_message = '<p style="color: red;">Security check failed. Please try again.</p>';
             } else {
                 
                 $errors = [];
                 $form_data = $_POST['tw_form_field'] ?? [];
-                $submitted_values = $form_data; // Keep user's data on error
+                $submitted_values = $form_data;
 
-                // --- 1. Validation Loop ---
+                // --- Validation Loop ---
                 foreach ( $saved_fields as $index => $field ) {
+                    
+                    // FIX #2: Skip validation for the submit button itself.
+                    if ( $field['type'] === 'submit' ) {
+                        continue;
+                    }
+
                     $value = isset( $form_data[$index] ) ? trim( $form_data[$index] ) : '';
                     
                     if ( ! empty( $field['required'] ) && empty( $value ) ) {
@@ -54,18 +59,18 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                     }
 
                     if ( ! empty( $field['confirm'] ) ) {
-                        $confirm_value = isset( $_POST['tw_form_field'][$index.'_confirm'] ) ? trim( $_POST['tw_form_field'][$index.'_confirm'] ) : '';
+                        // Correctly look for the confirmation field in the submitted data.
+                        $confirm_value = isset( $form_data[$index . '_confirm'] ) ? trim( $form_data[$index . '_confirm'] ) : '';
                         if ( $value !== $confirm_value ) {
                             $errors[] = 'The email addresses for "' . esc_html( $field['label'] ) . '" do not match.';
                         }
                     }
                 }
 
-                // --- 2. Process if No Errors ---
+                // --- Process if No Errors ---
                 if ( empty( $errors ) ) {
                     $submitted_values = []; // Clear form on success
                     
-                    // --- Prepare Data for Logging and Emails ---
                     $submitted_data_string = '';
                     $user_name = 'Guest'; $user_email = ''; $user_phone = '';
                     
@@ -77,22 +82,16 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                             $submitted_data_string .= esc_html( $label ) . ":\n" . $value . "\n\n";
                         }
                         
-                        // Heuristically find name, email, and phone for helpers
                         if ( stripos( $label, 'name' ) !== false && $user_name === 'Guest' ) $user_name = $value;
                         if ( $field['type'] === 'email' && empty($user_email) ) $user_email = $value;
                         if ( $field['type'] === 'tel' && empty($user_phone) ) $user_phone = $value;
                     }
 
-                    // --- 3. Log Submission to Pods ---
                     log_form_submission_to_pods([
-                        'messenger_name' => $user_name,
-                        'phone'          => $user_phone,
-                        'email'          => $user_email,
-                        'message'        => $submitted_data_string,
-                        'form_source'    => $form_post->post_title
+                        'messenger_name' => $user_name, 'phone' => $user_phone, 'email' => $user_email,
+                        'message' => $submitted_data_string, 'form_source' => $form_post->post_title
                     ]);
 
-                    // --- 4. Send Admin Notification ---
                     $admin_recipients = get_post_meta( $form_id, '_tw_form_recipients', true );
                     if ( ! empty( $admin_recipients ) ) {
                         $admin_subject = "New Submission: " . $form_post->post_title;
@@ -101,18 +100,14 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                         wp_mail( $admin_recipients, $admin_subject, $admin_body, $headers );
                     }
 
-                    // --- 5. Send User Confirmation ---
                     if ( ! empty( $user_email ) ) {
                         send_user_confirmation_email( $user_email, $user_name, $form_post->post_title, $submitted_data_string );
                     }
 
                     $status_message = '<p style="color: green;">Thank you! Your submission has been received.</p>';
                 } else {
-                    // --- Display Validation Errors ---
                     $status_message = '<ul style="color: red; border: 1px solid red; padding: 15px; list-style-position: inside;">';
-                    foreach ( $errors as $error ) {
-                        $status_message .= '<li>' . $error . '</li>';
-                    }
+                    foreach ( $errors as $error ) { $status_message .= '<li>' . $error . '</li>'; }
                     $status_message .= '</ul>';
                 }
             }
@@ -128,7 +123,7 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                 <?php if ( ! empty( $saved_fields ) && is_array( $saved_fields ) ) : ?>
                     <?php foreach ( $saved_fields as $index => $field ) :
                         $field_type = $field['type'] ?? 'text'; $field_label = $field['label'] ?? ''; $is_required = ! empty( $field['required'] ); $needs_confirm = ! empty( $field['confirm'] );
-                        $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($index); $field_name = 'tw_form_field['.esc_attr($index).']';
+                        $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($index); $field_name_base = 'tw_form_field['.esc_attr($index).']';
                         $required_html = $is_required ? ' required' : ''; $required_span = $is_required ? ' <span style="color:red;">*</span>' : '';
                         $repop_value = isset( $submitted_values[$index] ) ? esc_attr( $submitted_values[$index] ) : '';
                         ?>
@@ -136,18 +131,19 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                             <?php switch ( $field_type ) :
                                 case 'text': case 'email': case 'tel': ?>
                                     <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                    <input type="<?php echo $field_type; ?>" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" value="<?php echo $repop_value; ?>" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>>
+                                    <input type="<?php echo $field_type; ?>" id="<?php echo $field_id; ?>" name="<?php echo $field_name_base; ?>" value="<?php echo $repop_value; ?>" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>>
                                     <?php if ( $field_type === 'email' && $needs_confirm ) : ?>
                                         </div><div class="tw-form-field-wrapper tw-field-type-email-confirm" style="margin-bottom: 20px;">
                                         <label for="<?php echo $field_id; ?>-confirm">Confirm <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                        <input type="email" id="<?php echo $field_id; ?>-confirm" name="<?php echo $field_name; ?>_confirm" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>>
+                                        <?php // FIX #1: Correctly format the name attribute for the confirmation field. ?>
+                                        <input type="email" id="<?php echo $field_id; ?>-confirm" name="tw_form_field[<?php echo esc_attr($index); ?>_confirm]" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>>
                                     <?php endif; break;
                                 case 'textarea': ?>
                                     <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                    <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" rows="5" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>><?php echo esc_textarea( $repop_value ); ?></textarea>
+                                    <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name_base; ?>" rows="5" style="width: 100%; padding: 12px;"<?php echo $required_html; ?>><?php echo esc_textarea( $repop_value ); ?></textarea>
                                     <?php break;
                                 case 'checkbox': ?>
-                                    <label for="<?php echo $field_id; ?>"><input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" value="1" <?php checked( $repop_value, '1' ); ?><?php echo $required_html; ?>> <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                    <label for="<?php echo $field_id; ?>"><input type="checkbox" id="<?php echo $field_id; ?>" name="<?php echo $field_name_base; ?>" value="1" <?php checked( $repop_value, '1' ); ?><?php echo $required_html; ?>> <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
                                     <?php break;
                                 case 'submit': ?>
                                     <button type="submit" name="submit_tw_form" class="custom-form-submit-button"><?php echo esc_html( $field_label ?: 'Submit' ); ?></button>
