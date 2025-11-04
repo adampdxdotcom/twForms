@@ -99,7 +99,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 $headers = ['Content-Type: text/html; charset=UTF-8', "From: {$from_name} <{$from_email}>"];
                 wp_mail( $recipients, $subject, $message, $headers );
             }
-
+            
             // --- 3d. Process Conditional Notifications ---
             $conditional_rules = get_post_meta( $form_id, '_tw_form_conditional_rules', true );
             if ( ! empty( $conditional_rules ) && is_array( $conditional_rules ) ) {
@@ -107,16 +107,16 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                     $trigger_field   = $rule['field'];
                     $expected_value  = $rule['value'];
                     $recipient_email = $rule['recipient'];
+
+                    // Find the submitted value from our data map using the field label as the key
                     $submitted_value = $data_map[ $trigger_field ] ?? null;
 
                     if ( $submitted_value !== null ) {
                         $condition_met = false;
-                        // Check if the submitted value is an array (from checkboxes) and the expected value is one of them
-                        if ( is_array( $submitted_value ) && in_array( $expected_value, $submitted_value ) ) {
-                            $condition_met = true;
-                        } 
-                        // Check for a direct string match (for dropdowns, radio, single checkbox value)
-                        elseif ( is_string( $submitted_value ) && $submitted_value === $expected_value ) {
+                        
+                        // Handle both string and array (for checkboxes) comparisons
+                        $submitted_values = is_array($submitted_value) ? $submitted_value : explode(', ', $submitted_value);
+                        if ( in_array( $expected_value, $submitted_values ) ) {
                             $condition_met = true;
                         }
 
@@ -135,7 +135,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                     }
                 }
             }
-            
+
             // --- 3e. Send User Confirmation Email (Autoresponder) ---
             $user_email_settings = get_post_meta( $form_id, '_tw_form_user_email', true );
             
