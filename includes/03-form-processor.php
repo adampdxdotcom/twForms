@@ -3,7 +3,7 @@
  * Handles the universal [tw_form] shortcode, AJAX processing, and layout rendering.
  *
  * @package TW_Forms
- * @version 2.6.0
+ * @version 2.7.0
  */
 
 // If this file is called directly, abort.
@@ -71,11 +71,9 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                         $all_fields_html .= '<p style="margin: 0 0 10px 0;"><strong>' . esc_html($label) . ':</strong><br>' . nl2br(esc_html($value)) . '</p>';
                         $all_fields_text .= esc_html($label) . ":\n" . $value . "\n\n";
                         
-                        if ( $field['type'] === 'email' && empty($user_email_address) ) {
-                            $user_email_address = $value;
-                        }
-                        if ( stripos( $label, 'name' ) !== false && $user_name_guess === 'Guest' ) $user_name_guess = $value;
-                        if ( $field['type'] === 'tel' && empty($user_phone_guess) ) $user_phone_guess = $value;
+                        if ( $field['type'] === 'email' && empty($user_email_address) ) { $user_email_address = $value; }
+                        if ( stripos( $label, 'name' ) !== false && $user_name_guess === 'Guest' ) { $user_name_guess = $value; }
+                        if ( $field['type'] === 'tel' && empty($user_phone_guess) ) { $user_phone_guess = $value; }
                     }
                 }
             }
@@ -88,7 +86,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
             
             // --- 3c. Send Main Admin Notification Email ---
             $admin_email_settings = get_post_meta( $form_id, '_tw_form_admin_email', true );
-            $recipients = $admin_email_settings['to'] ?? get_post_meta( $form_id, '_tw_form_recipients', true );
+            $recipients = $admin_email_settings['to'] ?? '';
             if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
 
             if ( ! empty( $recipients ) && ! empty( $admin_email_settings ) && is_array( $admin_email_settings ) ) {
@@ -107,31 +105,29 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                     $trigger_field   = $rule['field'];
                     $expected_value  = $rule['value'];
                     $recipient_email = $rule['recipient'];
-
-                    // Find the submitted value from our data map using the field label as the key
                     $submitted_value = $data_map[ $trigger_field ] ?? null;
-
-                    if ( $submitted_value !== null ) {
-                        $condition_met = false;
-                        
-                        // Handle both string and array (for checkboxes) comparisons
-                        $submitted_values = is_array($submitted_value) ? $submitted_value : explode(', ', $submitted_value);
-                        if ( in_array( $expected_value, $submitted_values ) ) {
+                    
+                    $condition_met = false;
+                    if ( $expected_value === 'checked' ) {
+                        $condition_met = ! empty( $submitted_value );
+                    } elseif ( $expected_value === 'not_checked' ) {
+                        $condition_met = empty( $submitted_value );
+                    } else {
+                        $submitted_values_array = is_array($submitted_value) ? $submitted_value : explode(', ', (string) $submitted_value);
+                        if ( in_array( $expected_value, $submitted_values_array ) ) {
                             $condition_met = true;
                         }
+                    }
 
-                        if ( $condition_met ) {
-                            $conditional_subject = "New Alert from " . $form_post->post_title . ": " . $trigger_field;
-                            $conditional_body    = "A new submission on the '{$form_post->post_title}' form triggered this notification because the '{$trigger_field}' field was set to '{$expected_value}'.\n\n";
-                            $conditional_body   .= "Submitted by: " . ($user_name_guess ?? 'N/A') . "\n";
-                            $conditional_body   .= "Email Address: " . ($user_email_address ?? 'N/A') . "\n";
-                            
-                            $from_name  = get_bloginfo('name');
-                            $from_email = get_option('admin_email');
-                            $headers    = ["From: {$from_name} <{$from_email}>"];
-                            
-                            wp_mail( $recipient_email, $conditional_subject, $conditional_body, $headers );
-                        }
+                    if ( $condition_met ) {
+                        $conditional_subject = "New Alert from " . $form_post->post_title . ": " . $trigger_field;
+                        $conditional_body    = "A new submission on the '{$form_post->post_title}' form triggered this notification because the '{$trigger_field}' field met the condition.\n\n";
+                        $conditional_body   .= "Submitted by: " . ($user_name_guess ?? 'N/A') . "\n";
+                        $conditional_body   .= "Email Address: " . ($user_email_address ?? 'N/A') . "\n";
+                        $from_name  = get_bloginfo('name');
+                        $from_email = get_option('admin_email');
+                        $headers    = ["From: {$from_name} <{$from_email}>"];
+                        wp_mail( $recipient_email, $conditional_subject, $conditional_body, $headers );
                     }
                 }
             }
@@ -215,38 +211,39 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                             <?php foreach ( $column as $field_index => $field ) :
                                 $field_type = $field['type'] ?? 'text'; $field_label = $field['label'] ?? ''; $is_required = ! empty( $field['required'] ); $needs_confirm = ! empty( $field['confirm'] );
                                 $html_content = $field['html_content'] ?? ''; $placeholder_text = $field['placeholder'] ?? '';
+                                $hide_label = ! empty( $field['hide_label'] );
                                 $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($row_index).'-'.esc_attr($col_index).'-'.esc_attr($field_index);
-                                
                                 $field_name = 'tw_form_fields['.esc_attr($row_index).']['.esc_attr($col_index).']['.esc_attr($field_index).']';
-                                
                                 $required_html = $is_required ? ' required' : ''; $required_span = $is_required ? ' <span style="color:red;">*</span>' : '';
                                 $repop_value = isset( $submitted_values[$row_index][$col_index][$field_index] ) ? $submitted_values[$row_index][$col_index][$field_index] : '';
                                 ?>
                                 <div class="tw-form-field-wrapper tw-field-type-<?php echo $field_type; ?>">
                                     <?php switch ( $field_type ) :
-                                        case 'text': case 'email': case 'tel': ?>
-                                            <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                            <input type="<?php echo $field_type; ?>" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" value="<?php echo esc_attr($repop_value); ?>" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>>
-                                            <?php if ( $field_type === 'email' && $needs_confirm ) : ?>
-                                                <div class="tw-form-field-wrapper tw-field-type-email-confirm" style="margin-top:10px;"><label for="<?php echo $field_id; ?>-confirm">Confirm <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label><input type="email" id="<?php echo $field_id; ?>-confirm" name="tw_form_fields_confirm[<?php echo esc_attr($row_index.'_'.$col_index.'_'.$field_index); ?>_confirm]" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>></div>
+                                        case 'text': case 'email': case 'tel': case 'textarea': case 'dropdown': ?>
+                                            <?php if ( ! $hide_label && ! empty( $field_label ) ) : ?>
+                                                <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <?php endif; ?>
+                                            <?php if ( in_array( $field_type, ['text', 'email', 'tel'] ) ) : ?>
+                                                <input type="<?php echo $field_type; ?>" id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" value="<?php echo esc_attr($repop_value); ?>" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>>
+                                                <?php if ( $field_type === 'email' && $needs_confirm ) : ?>
+                                                    <div class="tw-form-field-wrapper tw-field-type-email-confirm" style="margin-top:10px;"><label for="<?php echo $field_id; ?>-confirm">Confirm <?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label><input type="email" id="<?php echo $field_id; ?>-confirm" name="tw_form_fields_confirm[<?php echo esc_attr($row_index.'_'.$col_index.'_'.$field_index); ?>_confirm]" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>></div>
+                                                <?php endif; ?>
+                                            <?php elseif ( $field_type === 'textarea' ) : ?>
+                                                <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" rows="5" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>><?php echo esc_textarea( $repop_value ); ?></textarea>
+                                            <?php elseif ( $field_type === 'dropdown' ) : 
+                                                $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); ?>
+                                                <select id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>"<?php echo $required_html; ?>>
+                                                    <option value="">-- Select an Option --</option>
+                                                    <?php foreach ($options as $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?>
+                                                        <option value="<?php echo esc_attr($option_label); ?>" <?php selected($repop_value, $option_label); ?>><?php echo esc_html($option_label); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             <?php endif; break;
-                                        case 'textarea': ?>
-                                            <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                            <textarea id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>" rows="5" placeholder="<?php echo esc_attr($placeholder_text); ?>"<?php echo $required_html; ?>><?php echo esc_textarea( $repop_value ); ?></textarea>
-                                            <?php break;
-                                        case 'dropdown':
-                                            $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); ?>
-                                            <label for="<?php echo $field_id; ?>"><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
-                                            <select id="<?php echo $field_id; ?>" name="<?php echo $field_name; ?>"<?php echo $required_html; ?>>
-                                                <option value="">-- Select an Option --</option>
-                                                <?php foreach ($options as $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?>
-                                                    <option value="<?php echo esc_attr($option_label); ?>" <?php selected($repop_value, $option_label); ?>><?php echo esc_html($option_label); ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <?php break;
                                         case 'radio_group':
                                             $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); $cols = intval($field['cols'] ?? 1); ?>
-                                            <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <?php if ( ! $hide_label && ! empty( $field_label ) ) : ?>
+                                                <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <?php endif; ?>
                                             <div class="tw-radio-group" style="columns: <?php echo $cols; ?>; -webkit-columns: <?php echo $cols; ?>; -moz-columns: <?php echo $cols; ?>;">
                                             <?php foreach ($options as $opt_idx => $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?>
                                                 <label><input type="radio" name="<?php echo $field_name; ?>" value="<?php echo esc_attr($option_label); ?>" <?php checked($repop_value, $option_label); ?>> <?php echo esc_html($option_label); ?></label><br>
@@ -255,7 +252,9 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                                             <?php break;
                                         case 'checkbox_group':
                                             $options = explode("\n", str_replace("\r", "", $field['options'] ?? '')); $cols = intval($field['cols'] ?? 1); ?>
-                                            <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <?php if ( ! $hide_label && ! empty( $field_label ) ) : ?>
+                                                <label><?php echo esc_html( $field_label ); ?><?php echo $required_span; ?></label>
+                                            <?php endif; ?>
                                             <div class="tw-checkbox-group" style="columns: <?php echo $cols; ?>; -webkit-columns: <?php echo $cols; ?>; -moz-columns: <?php echo $cols; ?>;"><?php foreach ($options as $opt_idx => $option_label) : $option_label = trim($option_label); if(empty($option_label)) continue; ?><label><input type="checkbox" name="<?php echo $field_name; ?>[]" value="<?php echo esc_attr($option_label); ?>" <?php if(is_array($repop_value) && in_array($option_label, $repop_value)) echo 'checked'; ?>> <?php echo esc_html($option_label); ?></label><br><?php endforeach; ?></div>
                                             <?php break;
                                         case 'section_header': ?>
