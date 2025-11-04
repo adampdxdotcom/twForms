@@ -100,7 +100,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 $message    = tw_forms_process_tags( $admin_email['message'], $data_map, $form_post, $all_fields_html );
                 $from_name  = tw_forms_process_tags( $admin_email['from_name'], $data_map, $form_post, $all_fields_html );
                 $from_email = tw_forms_process_tags( $admin_email['from_email'], $data_map, $form_post, $all_fields_html );
-                $reply_to   = tw_forms_process_tags( $admin_email['reply_to'], $data_map, $form_post, $all_fields_html );
+                $reply_to   = tw_forms_process_tags( $admin_email['reply_to'], $data_map, $form_post, '' ); // Pass empty html for reply_to
                 
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
@@ -124,7 +124,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 $message    = tw_forms_process_tags( $user_email['message'], $data_map, $form_post, $all_fields_html );
                 $from_name  = tw_forms_process_tags( $user_email['from_name'], $data_map, $form_post, $all_fields_html );
                 $from_email = tw_forms_process_tags( $user_email['from_email'], $data_map, $form_post, $all_fields_html );
-                $reply_to   = tw_forms_process_tags( $user_email['reply_to'], $data_map, $form_post, $all_fields_html );
+                $reply_to   = tw_forms_process_tags( $user_email['reply_to'], $data_map, $form_post, '' ); // Pass empty html for reply_to
 
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
