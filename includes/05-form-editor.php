@@ -53,10 +53,14 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                         $field_type = esc_attr( $field['type'] ?? 'text' );
                         $field_label = esc_attr( $field['label'] ?? '' );
                         $is_required = ! empty( $field['required'] );
+
+                        // Generate a unique index for existing fields.
+                        // Using the array index is fine here because PHP will re-key on save.
+                        $field_index = $index; 
                         ?>
                         <div class="form-field-block">
                             <div class="field-header">
-                                <span class="field-type-label"><?php echo esc_html( ucfirst( $field_type ) ); ?></span>
+                                <span class="field-type-label"><?php echo esc_html( ucfirst( $field_type ) ); // Use helper function later ?></span>
                                 <div class="field-actions">
                                     <a href="#" class="move-field" title="Drag to reorder">☰</a>
                                     <a href="#" class="delete-field" title="Delete this field">×</a>
@@ -65,7 +69,7 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                             <div class="field-settings">
                                 <div class="setting-row">
                                     <label>Field Type</label>
-                                    <select name="tw_form_fields[<?php echo $index; ?>][type]" class="field-type-select">
+                                    <select name="tw_form_fields[<?php echo $field_index; ?>][type]" class="field-type-select">
                                         <option value="text" <?php selected( $field_type, 'text' ); ?>>Text Input</option>
                                         <option value="email" <?php selected( $field_type, 'email' ); ?>>Email Address</option>
                                         <option value="tel" <?php selected( $field_type, 'tel' ); ?>>Phone Number</option>
@@ -76,11 +80,11 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                                 </div>
                                 <div class="setting-row">
                                     <label>Field Label</label>
-                                    <input type="text" name="tw_form_fields[<?php echo $index; ?>][label]" value="<?php echo $field_label; ?>" placeholder="e.g., Your Full Name">
+                                    <input type="text" name="tw_form_fields[<?php echo $field_index; ?>][label]" value="<?php echo $field_label; ?>" placeholder="e.g., Your Full Name">
                                 </div>
                                 <div class="setting-row">
                                     <label>
-                                        <input type="checkbox" name="tw_form_fields[<?php echo $index; ?>][required]" value="1" <?php checked( $is_required ); ?>> Required?
+                                        <input type="checkbox" name="tw_form_fields[<?php echo $field_index; ?>][required]" value="1" <?php checked( $is_required ); ?>> Required?
                                     </label>
                                 </div>
                             </div>
@@ -104,7 +108,7 @@ if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
                     <div class="setting-row">
                         <label>Field Type</label>
                         <select name="tw_form_fields[__INDEX__][type]" class="field-type-select">
-                            <option value="text">Text Input</option><option value="email">Email Address</option><option value="tel">Phone Number</option><option value="textarea">Text Area (Message)</option><option value="checkbox">Checkbox</option><option value="submit">Submit Button</option>
+                            <option value="text" selected>Text Input</option><option value="email">Email Address</option><option value="tel">Phone Number</option><option value="textarea">Text Area (Message)</option><option value="checkbox">Checkbox</option><option value="submit">Submit Button</option>
                         </select>
                     </div>
                     <div class="setting-row">
@@ -150,6 +154,7 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
         $sanitized_fields = [];
         if ( isset( $_POST['tw_form_fields'] ) && is_array( $_POST['tw_form_fields'] ) ) {
             foreach ( $_POST['tw_form_fields'] as $field_data ) {
+                if ( ! is_array( $field_data ) ) continue; // Skip if data is malformed
                 $sanitized_field = [
                     'type'     => isset( $field_data['type'] ) ? sanitize_key( $field_data['type'] ) : 'text',
                     'label'    => isset( $field_data['label'] ) ? sanitize_text_field( $field_data['label'] ) : '',
@@ -162,14 +167,11 @@ if ( ! function_exists( 'tw_forms_save_meta_box_data' ) ) {
 
         // --- Save the Form Settings ---
         if ( isset( $_POST['tw_form_recipients'] ) ) {
-            // Sanitize a comma-separated list of emails
             $emails_raw = explode( ',', $_POST['tw_form_recipients'] );
             $sanitized_emails = [];
             foreach ( $emails_raw as $email ) {
                 $trimmed_email = trim( $email );
-                if ( is_email( $trimmed_email ) ) {
-                    $sanitized_emails[] = $trimmed_email;
-                }
+                if ( is_email( $trimmed_email ) ) { $sanitized_emails[] = $trimmed_email; }
             }
             update_post_meta( $post_id, '_tw_form_recipients', implode( ', ', $sanitized_emails ) );
         }
@@ -193,7 +195,7 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
         <script type="text/javascript">
             jQuery(document).ready(function($) {
                 const fieldsContainer = $('#form-fields-container');
-                const fieldTemplateHtml = $('#tw-form-field-template').html();
+                const fieldTemplate = $('#tw-form-field-template');
 
                 function updateEmptyState() {
                     if (fieldsContainer.find('.form-field-block').length === 0) {
@@ -207,15 +209,17 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                 
                 $('#add-new-field').on('click', function() {
                     updateEmptyState();
-                    const newIndex = new Date().getTime(); // Use timestamp for a unique index
-                    const newFieldHtml = fieldTemplateHtml.replace(/__INDEX__/g, newIndex);
-                    fieldsContainer.append(newFieldHtml);
+                    const newField = fieldTemplate.find('.form-field-block').clone();
+                    const newIndex = new Date().getTime();
+                    newField.find('[name*="__INDEX__"]').each(function() {
+                        $(this).attr('name', $(this).attr('name').replace('__INDEX__', newIndex));
+                    });
+                    fieldsContainer.append(newField);
                 });
 
                 fieldsContainer.on('click', '.delete-field', function(e) { e.preventDefault(); if (confirm('Are you sure?')) { $(this).closest('.form-field-block').remove(); updateEmptyState(); } });
                 fieldsContainer.on('change', '.field-type-select', function() { $(this).closest('.form-field-block').find('.field-type-label').text($(this).find('option:selected').text()); });
 
-                updateEmptyState(); // Initial check
             });
         </script>
         <style>.field-placeholder{border:2px dashed #ccd0d4;background-color:#f0f8ff;margin-bottom:10px;box-sizing:border-box;}</style>
