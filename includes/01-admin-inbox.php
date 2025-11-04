@@ -3,7 +3,7 @@
  * Handles the Message Inbox, Admin Menus, and Settings UI for TW Forms.
  *
  * @package TW_Forms
- * @version 2.0.1
+ * @version 2.6.0
  */
 
 // If this file is called directly, abort.
@@ -32,28 +32,21 @@ if ( ! class_exists( 'Messages_List_Table' ) ) {
             $post_status = isset($_REQUEST['post_status']) ? $_REQUEST['post_status'] : 'all';
             $base_url = admin_url('admin.php?page=tw-forms-inbox');
             $counts = wp_count_posts('messages');
-            $all_count = $counts->publish + $counts->draft + $counts->pending + $counts->private + $counts->future;
+            $all_count = ($counts->publish ?? 0) + ($counts->draft ?? 0) + ($counts->pending ?? 0) + ($counts->private ?? 0) + ($counts->future ?? 0);
             $all_url = remove_query_arg('post_status', $base_url);
             $status_links['all'] = sprintf('<a href="%s" class="%s">%s <span class="count">(%d)</span></a>', esc_url($all_url), $post_status === 'all' ? 'current' : '', __('All'), $all_count);
-            if ($counts->trash > 0) {
+            if (isset($counts->trash) && $counts->trash > 0) {
                 $trash_url = add_query_arg('post_status', 'trash', $base_url);
                 $status_links['trash'] = sprintf('<a href="%s" class="%s">%s <span class="count">(%d)</span></a>', esc_url($trash_url), $post_status === 'trash' ? 'current' : '', __('Trash'), $counts->trash);
             }
             return $status_links;
         }
 
-        function get_columns() { 
-            return ['cb' => '<input type="checkbox" />', 'messenger_name' => 'From', 'email' => 'Email', 'form_source' => 'Source', 'entry_status' => 'Status', 'post_date' => 'Received']; 
-        }
-
-        function get_sortable_columns() { 
-            return ['messenger_name' => ['messenger_name', false], 'form_source' => ['form_source', false], 'entry_status' => ['entry_status', false], 'post_date' => ['post_date', true]]; 
-        }
-
+        function get_columns() { return ['cb' => '<input type="checkbox" />', 'messenger_name' => 'From', 'email' => 'Email', 'form_source' => 'Source', 'entry_status' => 'Status', 'post_date' => 'Received']; }
+        function get_sortable_columns() { return ['messenger_name' => ['messenger_name', false], 'form_source' => ['form_source', false], 'entry_status' => ['entry_status', false], 'post_date' => ['post_date', true]]; }
         function column_default( $item, $column_name ) { return isset($item[$column_name]) ? esc_html($item[$column_name]) : '—'; }
         function column_cb( $item ) { return sprintf('<input type="checkbox" name="entry_id[]" value="%s" />', $item['ID']); }
         function column_email( $item ) { return esc_html($item['email']); }
-
         function column_messenger_name( $item ) {
             $post_status_view = isset($_REQUEST['post_status']) ? $_REQUEST['post_status'] : 'all';
             $base_page_url = 'admin.php?page=tw-forms-inbox';
@@ -72,22 +65,8 @@ if ( ! class_exists( 'Messages_List_Table' ) ) {
             }
             return '<strong>' . esc_html($item['messenger_name']) . '</strong>' . $this->row_actions($actions);
         }
-
-        function column_entry_status( $item ) { 
-            if ( $item['is_blacklisted'] ) { return 'Blocked <span class="status-indicator-dot red-dot" title="This sender is on the blacklist">●</span>'; } 
-            switch ($item['entry_status']) { 
-                case 'Unread': return 'Unread <span class="status-indicator-dot green-dot" title="Unread Message">●</span>'; 
-                case 'Replied': return 'Replied <span class="status-indicator-dot purple-dot" title="You have replied to this message">●</span>'; 
-                case 'Read': default: return 'Read <span class="status-indicator-dot blue-dot" title="Message has been read">●</span>'; 
-            } 
-        }
-
-        function get_bulk_actions() { 
-            $post_status = isset($_REQUEST['post_status']) ? $_REQUEST['post_status'] : 'all';
-            if ($post_status === 'trash') { return ['untrash' => 'Restore', 'delete' => 'Delete Permanently']; }
-            return ['mark_read' => 'Mark as Read', 'mark_unread' => 'Mark as Unread', 'trash' => 'Move to Trash']; 
-        }
-
+        function column_entry_status( $item ) { if ( $item['is_blacklisted'] ) { return 'Blocked <span class="status-indicator-dot red-dot" title="This sender is on the blacklist">●</span>'; } switch ($item['entry_status']) { case 'Unread': return 'Unread <span class="status-indicator-dot green-dot" title="Unread Message">●</span>'; case 'Replied': return 'Replied <span class="status-indicator-dot purple-dot" title="You have replied to this message">●</span>'; case 'Read': default: return 'Read <span class="status-indicator-dot blue-dot" title="Message has been read">●</span>'; } }
+        function get_bulk_actions() { $post_status = isset($_REQUEST['post_status']) ? $_REQUEST['post_status'] : 'all'; if ($post_status === 'trash') { return ['untrash' => 'Restore', 'delete' => 'Delete Permanently']; } return ['mark_read' => 'Mark as Read', 'mark_unread' => 'Mark as Unread', 'trash' => 'Move to Trash']; }
         function prepare_items() {
             $this->_column_headers = [$this->get_columns(), [], $this->get_sortable_columns(), 'messenger_name'];
             if (function_exists('pods')) { 
@@ -169,17 +148,6 @@ if ( ! function_exists( 'my_custom_message_settings_page' ) ) {
 
 if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
     function my_custom_message_settings_init() {
-        // CLEANUP: The old "Email Routing" section has been removed as this is now handled on a per-form basis.
-        
-        // Section for Admin Notification Templates
-        register_setting('my_message_settings_group', 'my_admin_email_templates');
-        add_settings_section('admin_email_template_section', 'Admin Notification Email Templates', function() {
-            echo '<p>Customize the automated email sent to administrators after a user submits a form. Use the available placeholders to dynamically insert form data.</p>';
-            echo '<p>Available placeholders: <strong>This is now a fallback only.</strong> Modern forms use a simpler template. This is kept for any legacy forms still in use.</p>';
-        }, 'my_message_settings_page');
-        
-        // ... [Legacy admin email template fields remain for backward compatibility] ...
-        
         register_setting('my_message_settings_group','my_form_email_templates');
         add_settings_section('email_template_section','User Confirmation Email Template',function(){echo '<p>Customize the automated email sent to users after they submit a form. Use the available placeholders.</p><p>Available placeholders: <code>{user_name}</code>, <code>{form_source}</code>, <code>{submitted_data}</code></p>';},'my_message_settings_page');
         add_settings_field('user_email_subject','Subject',function(){$options=get_option('my_form_email_templates');echo '<input type="text" name="my_form_email_templates[subject]" value="'.esc_attr($options['subject']??'Thank you for your submission!').'" class="regular-text">';},'my_message_settings_page','email_template_section');
@@ -199,39 +167,38 @@ if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
 // =============================================================================
 // == ADMIN MENU
 // =============================================================================
-
 if ( ! function_exists( 'my_custom_message_viewer_menu' ) ) {
     function my_custom_message_viewer_menu() {
         
-        $parent_slug = 'tw-forms-inbox';
-        $base_page_url = 'admin.php?page=' . $parent_slug;
+        $parent_slug = 'tw-forms-dashboard';
+        $inbox_slug = 'tw-forms-inbox';
+        $base_page_url = 'admin.php?page=' . $inbox_slug;
 
-        // Action handler for single-message actions (trash, blacklist, reply, etc.)
-        if (isset($_GET['action']) && !isset($_GET['action2']) && isset($_GET['entry_id'])) {
-            $entry_id=intval($_GET['entry_id']);$action=sanitize_key($_GET['action']);$redirect_url=admin_url($base_page_url);if(isset($_REQUEST['post_status'])){$redirect_url=add_query_arg('post_status',sanitize_key($_REQUEST['post_status']),$redirect_url);}
-            switch ($action) {
-                case 'blacklist':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'blacklist_email_'.$entry_id)){$pod=pods('messages',$entry_id);if($pod->exists()){$email_to_blacklist=$pod->field('email');if($email_to_blacklist&&!is_email_blacklisted($email_to_blacklist)){pods('blacklist')->add(['post_title'=>$email_to_blacklist,'post_status'=>'publish','email_address'=>$email_to_blacklist]);}wp_safe_redirect(admin_url($base_page_url.'&action=view&entry_id='.$entry_id.'&blacklisted=true'));exit;}}else{wp_die('Security check failed.');}break;
-                case 'trash':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'trash_message_'.$entry_id)){wp_trash_post($entry_id);wp_safe_redirect($redirect_url);exit;}break;
-                case 'untrash':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'untrash_message_'.$entry_id)){wp_untrash_post($entry_id);$redirect_url=remove_query_arg('post_status',$redirect_url);wp_safe_redirect($redirect_url);exit;}break;
-                case 'delete':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'delete_message_'.$entry_id)){wp_delete_post($entry_id,true);wp_safe_redirect($redirect_url);exit;}break;
+        if ( isset($_GET['page']) && $_GET['page'] === $inbox_slug ) {
+            if (isset($_GET['action']) && !isset($_GET['action2']) && isset($_GET['entry_id'])) {
+                $entry_id=intval($_GET['entry_id']);$action=sanitize_key($_GET['action']);$redirect_url=admin_url($base_page_url);if(isset($_REQUEST['post_status'])){$redirect_url=add_query_arg('post_status',sanitize_key($_REQUEST['post_status']),$redirect_url);}
+                switch ($action) {
+                    case 'blacklist':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'blacklist_email_'.$entry_id)){$pod=pods('messages',$entry_id);if($pod->exists()){$email_to_blacklist=$pod->field('email');if($email_to_blacklist&&!is_email_blacklisted($email_to_blacklist)){pods('blacklist')->add(['post_title'=>$email_to_blacklist,'post_status'=>'publish','email_address'=>$email_to_blacklist]);}wp_safe_redirect(admin_url('admin.php?page=tw-forms-inbox&action=view&entry_id='.$entry_id.'&blacklisted=true'));exit;}}else{wp_die('Security check failed.');}break;
+                    case 'trash':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'trash_message_'.$entry_id)){wp_trash_post($entry_id);wp_safe_redirect($redirect_url);exit;}break;
+                    case 'untrash':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'untrash_message_'.$entry_id)){wp_untrash_post($entry_id);$redirect_url=remove_query_arg('post_status',$redirect_url);wp_safe_redirect($redirect_url);exit;}break;
+                    case 'delete':if(isset($_GET['_wpnonce'])&&wp_verify_nonce($_GET['_wpnonce'],'delete_message_'.$entry_id)){wp_delete_post($entry_id,true);wp_safe_redirect($redirect_url);exit;}break;
+                }
+            }
+            if (isset($_POST['action']) && $_POST['action'] === 'send_reply' && isset($_POST['entry_id'])) {
+                $entry_id = intval($_POST['entry_id']); check_admin_referer('send_reply_' . $entry_id); $pod = pods('messages', $entry_id);
+                if ($pod->exists()) {
+                    $reply_message=sanitize_textarea_field($_POST['reply_message']);$to=$pod->field('email');$subject='Re: Your submission from '.$pod->field('form_source');$admin_email=get_option('admin_email');$headers=['Reply-To: '.$admin_email];
+                    if(wp_mail($to,$subject,$reply_message,$headers)){$current_notes=$pod->field('notes');if(is_array($current_notes)){$current_notes='';}$new_note="--- Replied on ".current_time('mysql')." ---\n".$reply_message;$pod->save('notes',$current_notes."\n\n".$new_note);$pod->save('entry_status','Replied');wp_safe_redirect(admin_url('admin.php?page=tw-forms-inbox&action=view&entry_id='.$entry_id.'&replied=true'));exit;}
+                }
+            }
+            $list_table = new Messages_List_Table(); $action = $list_table->current_action(); $entry_ids = isset($_REQUEST['entry_id']) ? (is_array($_REQUEST['entry_id']) ? $_REQUEST['entry_id'] : [$_REQUEST['entry_id']]) : []; $entry_ids = array_map('intval', $entry_ids);
+            if ( in_array( $action, [ 'mark_read', 'mark_unread', 'trash', 'untrash', 'delete' ] ) && ! empty( $entry_ids ) ) { 
+                check_admin_referer('bulk-messages'); 
+                foreach($entry_ids as $entry_id){switch($action){case 'mark_read':$pod=pods('messages',$entry_id);if($pod->exists()){$pod->save('entry_status','Read');}break;case 'mark_unread':$pod=pods('messages',$entry_id);if($pod->exists()){$pod->save('entry_status','Unread');}break;case 'trash':wp_trash_post($entry_id);break;case 'untrash':wp_untrash_post($entry_id);break;case 'delete':wp_delete_post($entry_id,true);break;}} 
+                $redirect_url=remove_query_arg(['action','action2','entry_id','_wpnonce']);if($action==='untrash'){$redirect_url=remove_query_arg('post_status',$redirect_url);}wp_safe_redirect($redirect_url);exit; 
             }
         }
-        // Action handler for the quick reply form
-        if (isset($_POST['action']) && $_POST['action'] === 'send_reply' && isset($_POST['entry_id'])) {
-            $entry_id = intval($_POST['entry_id']); check_admin_referer('send_reply_' . $entry_id); $pod = pods('messages', $entry_id);
-            if ($pod->exists()) {
-                $reply_message=sanitize_textarea_field($_POST['reply_message']);$to=$pod->field('email');$subject='Re: Your submission from '.$pod->field('form_source');$admin_email=get_option('admin_email');$headers=['Reply-To: '.$admin_email];
-                if(wp_mail($to,$subject,$reply_message,$headers)){$current_notes=$pod->field('notes');if(is_array($current_notes)){$current_notes='';}$new_note="--- Replied on ".current_time('mysql')." ---\n".$reply_message;$pod->save('notes',$current_notes."\n\n".$new_note);$pod->save('entry_status','Replied');wp_safe_redirect(admin_url($base_page_url.'&action=view&entry_id='.$entry_id.'&replied=true'));exit;}
-            }
-        }
-        // Action handler for bulk actions from the list table
-        $list_table = new Messages_List_Table(); $action = $list_table->current_action(); $entry_ids = isset($_REQUEST['entry_id']) ? (is_array($_REQUEST['entry_id']) ? $_REQUEST['entry_id'] : [$_REQUEST['entry_id']]) : []; $entry_ids = array_map('intval', $entry_ids);
-        if ( in_array( $action, [ 'mark_read', 'mark_unread', 'trash', 'untrash', 'delete' ] ) && ! empty( $entry_ids ) ) { 
-            check_admin_referer('bulk-messages'); 
-            foreach($entry_ids as $entry_id){switch($action){case 'mark_read':$pod=pods('messages',$entry_id);if($pod->exists()){$pod->save('entry_status','Read');}break;case 'mark_unread':$pod=pods('messages',$entry_id);if($pod->exists()){$pod->save('entry_status','Unread');}break;case 'trash':wp_trash_post($entry_id);break;case 'untrash':wp_untrash_post($entry_id);break;case 'delete':wp_delete_post($entry_id,true);break;}} 
-            $redirect_url=remove_query_arg(['action','action2','entry_id','_wpnonce']);if($action==='untrash'){$redirect_url=remove_query_arg('post_status',$redirect_url);}wp_safe_redirect($redirect_url);exit; 
-        }
-        // Add unread count bubble to the side menu
+        
         if($unread_count=pods('messages',['where'=>['entry_status.meta_value'=>'Unread']])->total_found()){
             global $menu;
             foreach($menu as $key=>$item){
@@ -242,58 +209,52 @@ if ( ! function_exists( 'my_custom_message_viewer_menu' ) ) {
             }
         }
         
-        // Create the top-level menu page
-        add_menu_page('All Messages', 'TW Forms', 'edit_posts', $parent_slug,
+        add_menu_page('TW Forms Dashboard', 'TW Forms', 'edit_posts', $parent_slug, 'tw_forms_render_dashboard_page', 'dashicons-email-alt', 26);
+        add_submenu_page( $parent_slug, 'All Messages', 'All Messages', 'edit_posts', $inbox_slug,
             function() {
                 if(isset($_GET['action']) && $_GET['action']==='view'){ render_message_detail_view(); } 
                 else {
-                    $post_status=isset($_REQUEST['post_status'])&&$_REQUEST['post_status']==='trash'?'trash':'all';$page_title=($post_status==='trash')?'Trashed Messages':'Message Entries';echo '<div class="wrap"><h1>'.esc_html($page_title).'</h1><form method="post">';$list_table=new Messages_List_Table();$list_table->views();$list_table->prepare_items();$list_table->search_box('Search Messages','search_id');$list_table->display();echo '</form></div>';
+                    $post_status=isset($_REQUEST['post_status'])&&$_REQUEST['post_status']==='trash'?'trash':'all';
+                    $page_title=($post_status==='trash')?'Trashed Messages':'Message Entries';
+                    echo '<div class="wrap"><h1>'.esc_html($page_title).'</h1><form method="post">';
+                    $list_table=new Messages_List_Table(); $list_table->views(); $list_table->prepare_items(); $list_table->search_box('Search Messages','search_id'); $list_table->display();
+                    echo '</form></div>';
                 }
-            }, 'dashicons-email-alt', 26
+            }
         );
 
-        // Add all submenu pages under the new parent
-        add_submenu_page($parent_slug, 'All Messages', 'All Messages', 'edit_posts', $parent_slug);
         add_submenu_page($parent_slug, 'All Forms', 'All Forms', 'edit_posts', 'edit.php?post_type=tw_form');
         add_submenu_page($parent_slug, 'Add New Form', 'Add New Form', 'edit_posts', 'post-new.php?post_type=tw_form');
-        add_submenu_page($parent_slug, 'Trash', 'Trash', 'edit_posts', $base_page_url.'&post_status=trash');
         add_submenu_page($parent_slug, 'Blacklist Manager', 'Blacklist Manager', 'edit_posts', 'edit.php?post_type=blacklist');
         add_submenu_page($parent_slug, 'Form Settings', 'Settings', 'manage_options', 'my_message_settings_page', 'my_custom_message_settings_page');
     }
     add_action('admin_menu', 'my_custom_message_viewer_menu', 9);
 }
 
+
 // =============================================================================
 // == ADMIN BAR MENU & STYLES
 // =============================================================================
-
 if ( ! function_exists( 'my_custom_messages_admin_bar_menu' ) ) {
-    // UPDATED: This function is now corrected.
     function my_custom_messages_admin_bar_menu($wp_admin_bar) {
         if (!current_user_can('edit_posts')) { return; }
         $unread_count = pods('messages', ['where' => ['entry_status.meta_value' => 'Unread']])->total_found();
-        
-        // FIX: Changed title to 'TW Forms' for consistency.
         $title = __('TW Forms'); 
-        
         if ($unread_count > 0) { $title .= ' <span class="ab-label awaiting-mod">' . $unread_count . '</span>'; }
-        $wp_admin_bar->add_node(['id'=>'my_messages_menu','title'=>$title,'href'=>admin_url('admin.php?page=tw-forms-inbox')]);
+        $wp_admin_bar->add_node(['id'=>'my_messages_menu','title'=>$title,'href'=>admin_url('admin.php?page=tw-forms-dashboard')]);
         $wp_admin_bar->add_node(['id'=>'all_messages','parent'=>'my_messages_menu','title'=>__('All Messages'),'href'=>admin_url('admin.php?page=tw-forms-inbox')]);
-        $wp_admin_bar->add_node(['id'=>'trash_messages','parent'=>'my_messages_menu','title'=>__('Trash'),'href'=>admin_url('admin.php?page=tw-forms-inbox&post_status=trash')]);
+        $wp_admin_bar->add_node(['id'=>'all_forms_link','parent'=>'my_messages_menu','title'=>__('All Forms'),'href'=>admin_url('edit.php?post_type=tw_form')]);
         $wp_admin_bar->add_node(['id'=>'message_settings','parent'=>'my_messages_menu','title'=>__('Form Settings'),'href'=>admin_url('admin.php?page=my_message_settings_page')]);
     }
     add_action('admin_bar_menu', 'my_custom_messages_admin_bar_menu', 90);
 }
 
 if ( ! function_exists( 'custom_admin_styles_for_messages' ) ) {
-    // UPDATED: This function now has improved CSS.
     function custom_admin_styles_for_messages() { 
         echo '<style>
             .status-indicator-dot{font-size:1.5em;line-height:1;vertical-align:middle;margin-right:8px}
             .red-dot{color:#d63638}.green-dot{color:#28a745}.purple-dot{color:#6f42c1}.blue-dot{color:#3498db}
-            
-            /* FIX: Improved styling for the counter bubbles */
-            #adminmenu a[href*="tw-forms-inbox"] .awaiting-mod,
+            #adminmenu a[href*="tw-forms-dashboard"] .awaiting-mod,
             #wp-admin-bar-my_messages_menu .awaiting-mod {
                 display: inline-block; vertical-align: text-top; background-color: #d63638;
                 color: #fff; font-size: 10px; line-height: 16px; height: 16px;
