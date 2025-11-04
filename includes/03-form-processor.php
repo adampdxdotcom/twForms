@@ -3,7 +3,7 @@
  * Handles the universal [tw_form] shortcode, AJAX processing, and layout rendering.
  *
  * @package TW_Forms
- * @version 2.5.1
+ * @version 2.6.0
  */
 
 // If this file is called directly, abort.
@@ -80,34 +80,32 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 }
             }
             
-            // --- 3b. Log to Pods ---
-            log_form_submission_to_pods([ 'messenger_name' => $user_name_guess, 'phone' => $user_phone_guess, 'email' => $user_email_address, 'message' => $all_fields_text, 'form_source' => $form_post->post_title ]);
+            // --- 3b. Log to Pods (Now passes the structured data map) ---
+            log_form_submission_to_pods(
+                [
+                    'messenger_name' => $user_name_guess, 
+                    'phone'          => $user_phone_guess, 
+                    'email'          => $user_email_address, 
+                    'message'        => $all_fields_text, 
+                    'form_source'    => $form_post->post_title
+                ],
+                $data_map // Pass the clean data array for saving as meta.
+            );
             
             // --- 3c. Send Admin Notification Email ---
             $admin_email_settings = get_post_meta( $form_id, '_tw_form_admin_email', true );
-            $recipients = $admin_email_settings['to'] ?? get_post_meta( $form_id, '_tw_form_recipients', true ); // Fallback to old meta for safety
+            $recipients = $admin_email_settings['to'] ?? get_post_meta( $form_id, '_tw_form_recipients', true );
             if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
 
             if ( ! empty( $recipients ) && ! empty( $admin_email_settings ) && is_array( $admin_email_settings ) ) {
-                
                 $subject    = tw_forms_process_tags( $admin_email_settings['subject'], $data_map, $form_post, $all_fields_html );
                 $message    = tw_forms_process_tags( $admin_email_settings['message'], $data_map, $form_post, $all_fields_html );
-                $reply_to   = tw_forms_process_tags( $admin_email_settings['reply_to'], $data_map, $form_post, '' );
-                
-                // From address is handled automatically by WP Mail SMTP, but we set a sensible default.
                 $from_name  = get_bloginfo('name');
                 $from_email = get_option('admin_email');
-                
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
                     "From: {$from_name} <{$from_email}>"
                 ];
-
-                // Set Reply-To so staff can reply directly to the user
-                if ( is_email( $reply_to ) ) {
-                    $headers[] = "Reply-To: {$reply_to}";
-                }
-                
                 wp_mail( $recipients, $subject, $message, $headers );
             }
             
@@ -115,20 +113,15 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
             $user_email_settings = get_post_meta( $form_id, '_tw_form_user_email', true );
             
             if ( ! empty( $user_email_settings['enabled'] ) && ! empty( $user_email_address ) && is_array( $user_email_settings ) ) {
-                
                 $subject    = tw_forms_process_tags( $user_email_settings['subject'], $data_map, $form_post, $all_fields_html );
                 $message    = tw_forms_process_tags( $user_email_settings['message'], $data_map, $form_post, $all_fields_html );
-
-                // FROM and REPLY-TO are handled automatically to enforce the no-reply policy
                 $from_name  = get_bloginfo('name');
-                $from_email = get_option('admin_email'); // Will be overridden by WP Mail SMTP to 'no-reply@...'
-
+                $from_email = get_option('admin_email');
                 $headers = [
                     'Content-Type: text/html; charset=UTF-8',
                     "From: {$from_name} <{$from_email}>",
-                    "Reply-To: {$from_name} <{$from_email}>" // Force replies to the non-monitored From address
+                    "Reply-To: {$from_name} <{$from_email}>"
                 ];
-
                 wp_mail( $user_email_address, $subject, $message, $headers );
             }
 
@@ -201,6 +194,7 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                                 $html_content = $field['html_content'] ?? ''; $placeholder_text = $field['placeholder'] ?? '';
                                 $field_id = 'tw-field-'.esc_attr($form_id).'-'.esc_attr($row_index).'-'.esc_attr($col_index).'-'.esc_attr($field_index);
                                 
+                                // THIS IS THE FIX: Use plural 'tw_form_fields' to match the processor.
                                 $field_name = 'tw_form_fields['.esc_attr($row_index).']['.esc_attr($col_index).']['.esc_attr($field_index).']';
                                 
                                 $required_html = $is_required ? ' required' : ''; $required_span = $is_required ? ' <span style="color:red;">*</span>' : '';
