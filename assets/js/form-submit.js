@@ -5,48 +5,65 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     forms.forEach(function(form) {
+        // We listen for the 'submit' event on the form itself, not the button click.
+        // This is more robust and respects HTML5 validation.
         form.addEventListener('submit', function (e) {
-            e.preventDefault(); // Prevent the default page reload
+            e.preventDefault(); // Always prevent the default page reload
 
             const button = form.querySelector('button[name="submit_tw_form"]');
             const statusDiv = form.querySelector('.form-status-message');
             const originalButtonText = button.textContent;
 
-            // Provide immediate feedback to the user
             button.disabled = true;
             button.textContent = 'Submitting...';
-            statusDiv.innerHTML = ''; // Clear previous messages
+            statusDiv.innerHTML = '';
 
-            // Collect all form data automatically
+            // This function sends the actual AJAX request.
+            const sendAjaxRequest = (formData) => {
+                fetch(twForms.ajaxurl, {
+                    method: 'POST',
+                    body: formData,
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        statusDiv.innerHTML = data.data.message;
+                        form.reset();
+                    } else {
+                        statusDiv.innerHTML = data.data.message;
+                    }
+                })
+                .catch(error => {
+                    statusDiv.innerHTML = '<p style="color: red;">A network error occurred. Please try again.</p>';
+                    console.error('Form Submission Error:', error);
+                })
+                .finally(() => {
+                    button.disabled = false;
+                    button.textContent = originalButtonText;
+                });
+            };
+
             const formData = new FormData(form);
-            formData.append('action', 'tw_forms_submit'); // This is crucial for our AJAX endpoint
+            formData.append('action', 'tw_forms_submit');
 
-            // Send the data to the server
-            fetch(twForms.ajaxurl, {
-                method: 'POST',
-                body: formData,
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // On success, show the message and reset the form
-                    statusDiv.innerHTML = data.data.message;
-                    form.reset();
-                } else {
-                    // On failure, build and display the error list
-                    statusDiv.innerHTML = data.data.message;
-                }
-            })
-            .catch(error => {
-                // Handle network errors
-                statusDiv.innerHTML = '<p style="color: red;">A network error occurred. Please try again.</p>';
-                console.error('Form Submission Error:', error);
-            })
-            .finally(() => {
-                // Always re-enable the button
-                button.disabled = false;
-                button.textContent = originalButtonText;
-            });
+            // --- NEW: reCAPTCHA Integration ---
+            // Check if reCAPTCHA is enabled for this site (twForms.siteKey will exist).
+            if (twForms.siteKey && typeof grecaptcha !== 'undefined') {
+                button.textContent = 'Verifying...';
+                grecaptcha.ready(function() {
+                    grecaptcha.execute(twForms.siteKey, { action: 'form_submit' }).then(function(token) {
+                        formData.append('recaptcha_token', token);
+                        sendAjaxRequest(formData); // Send request AFTER getting token
+                    }).catch(function(error) {
+                        statusDiv.innerHTML = '<p style="color: red;">Could not get spam protection token. Please try again.</p>';
+                        button.disabled = false;
+                        button.textContent = originalButtonText;
+                    });
+                });
+            } else {
+                // If reCAPTCHA is not enabled, send the request immediately.
+                sendAjaxRequest(formData);
+            }
         });
     });
 });
