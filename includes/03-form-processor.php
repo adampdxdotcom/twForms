@@ -28,6 +28,12 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
         // --- 2. Validation Loop ---
         $saved_layout = get_post_meta( $form_id, '_tw_form_layout', true );
         $errors = []; $form_data = $_POST['tw_form_fields'] ?? [];
+
+        // Remove slashes that WordPress might add
+        if ( ! empty( $form_data ) ) {
+            $form_data = stripslashes_deep( $form_data );
+        }
+        
         if ( ! empty( $saved_layout ) && is_array( $saved_layout ) ) {
             foreach ( $saved_layout as $row_index => $row ) {
                 foreach ( $row['columns'] as $col_index => $column ) {
@@ -38,7 +44,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                         if ( $field['type'] === 'email' && ! empty( $value ) && ! is_email( $value ) ) { $errors[] = 'Please enter a valid email for "' . esc_html( $field['label'] ) . '".'; }
                         if ( ! empty( $field['confirm'] ) ) {
                             $confirm_key = $row_index.'_'.$col_index.'_'.$field_index.'_confirm';
-                            $confirm_value = isset( $_POST['tw_form_fields_confirm'][$confirm_key] ) ? trim( $_POST['tw_form_fields_confirm'][$confirm_key] ) : '';
+                            $confirm_value = isset( $_POST['tw_form_fields_confirm'][$confirm_key] ) ? trim( stripslashes( $_POST['tw_form_fields_confirm'][$confirm_key] ) ) : '';
                             if ( $value !== $confirm_value ) { $errors[] = 'The email addresses for "' . esc_html( $field['label'] ) . '" do not match.'; }
                         }
                     }
@@ -88,7 +94,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 ['messenger_name' => $user_name_guess, 'phone' => $user_phone_guess, 'email' => $user_email_address, 'message' => $all_fields_text, 'form_source' => $form_post->post_title],
                 $data_map
             );
-
+            
             // --- 3c. Process Conditional Notifications ---
             $should_send_main_notification = true;
             $conditional_rules = get_post_meta( $form_id, '_tw_form_conditional_rules', true );
@@ -113,12 +119,10 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                     }
 
                     if ( $condition_met ) {
-                        // Check if we should suppress the main notification
                         if ( $suppress && count($non_required_filled_fields) === 1 && $non_required_filled_fields[0] === $trigger_field ) {
                             $should_send_main_notification = false;
                         }
 
-                        // Determine email content (custom or default)
                         $custom_subject = ! empty( $rule['subject'] ) ? $rule['subject'] : "New Alert from [form_name]: " . $trigger_field;
                         $custom_message = ! empty( $rule['message'] ) ? $rule['message'] : "A new submission on the '[form_name]' form triggered this notification.\n\nSubmitted by: " . ($user_name_guess ?? 'N/A') . "\nEmail Address: " . ($user_email_address ?? 'N/A');
                         
@@ -131,7 +135,7 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                         wp_mail( $recipient_email, $subject, $message, $headers );
 
                         if ( ! $should_send_main_notification ) {
-                            break; // Stop processing other rules if we've found our single sender
+                            break;
                         }
                     }
                 }
@@ -208,6 +212,7 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         $submitted_values = [];
 
         if ( isset( $_POST['submit_tw_form'] ) && ! wp_doing_ajax() ) {
+            $_POST = stripslashes_deep($_POST);
             $result = tw_forms_process_submission();
             $status_message = $result['message'];
             if ( ! $result['success'] ) {
@@ -217,7 +222,6 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
         
         ob_start(); ?>
         <div class="tw-form-container">
-            <div id="tw-form-status-<?php echo esc_attr( $form_id ); ?>" class="form-status-message"><?php echo $status_message; ?></div>
             <form method="post" action="#tw-form-status-<?php echo esc_attr( $form_id ); ?>" id="tw-form-<?php echo esc_attr( $form_id ); ?>" class="tw-form">
                 <input type="hidden" name="tw_form_id" value="<?php echo esc_attr( $form_id ); ?>">
                 <?php wp_nonce_field( 'process_tw_form_' . $form_id, 'tw_form_nonce' ); ?>
@@ -298,6 +302,7 @@ if ( ! function_exists( 'tw_forms_universal_shortcode_handler' ) ) {
                     <?php endforeach; ?>
                 <?php endif; ?>
             </form>
+            <div id="tw-form-status-<?php echo esc_attr( $form_id ); ?>" class="form-status-message"><?php echo $status_message; ?></div>
         </div>
         <?php
         enqueue_form_spam_protection_scripts(); tw_forms_print_layout_css(); return ob_get_clean();
@@ -314,6 +319,7 @@ if ( ! function_exists('tw_forms_print_layout_css') ) {
         <style>
             .tw-form-errors { list-style-type: none !important; margin: 0 0 20px 0 !important; padding: 1rem !important; background-color: #f8d7da !important; color: #721c24 !important; border: 1px solid #f5c6cb !important; border-radius: 4px !important; }
             .tw-form-errors li { margin-bottom: 0.5rem !important; } .tw-form-errors li:last-child { margin-bottom: 0 !important; }
+            .tw-form-container .form-status-message { margin-top: 20px; }
             .tw-form-row { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
             .tw-form-col { flex: 1 1 0; min-width: 0; }
             .tw-form-col-2 { flex-basis: calc(50% - 10px); } .tw-form-col-3 { flex-basis: calc(33.33% - 14px); } .tw-form-col-4 { flex-basis: calc(25% - 15px); }
