@@ -3,7 +3,7 @@
  * Handles the Message Inbox, Admin Menus, and Settings UI for TW Forms.
  *
  * @package TW_Forms
- * @version 2.6.0
+ * @version 2.8.0
  */
 
 // If this file is called directly, abort.
@@ -103,38 +103,11 @@ if ( ! function_exists( 'render_message_detail_view' ) ) {
         $entry_id = isset($_GET['entry_id']) ? intval($_GET['entry_id']) : 0; if (!$entry_id) { wp_die('Invalid entry ID.'); } 
         $pod = pods('messages', $entry_id); if (!$pod->exists()) { wp_die('Entry not found.'); }
         if ($pod->field('entry_status') === 'Unread' && $pod->field('post_status') === 'publish') { $pod->save('entry_status', 'Read'); }
-        
-        // --- Get structured data for new display format ---
         $submitted_data = get_post_meta( $pod->id(), '_tw_form_submitted_data', true );
-
-        // --- Fallback for old data format ---
-        $raw_message = $pod->field('message'); $user_message = $raw_message; $auto_data = ''; $parts = explode("\n\n---\n\n", $raw_message, 2); 
-        if (count($parts) === 2) { $user_message = $parts[0]; $auto_data = $parts[1]; }
+        $raw_message = $pod->field('message');
         $notes = $pod->field('notes'); if ( is_array($notes) ) { $notes = ''; }
         ?>
-        <style>
-            .message-viewer-wrap{display:flex;gap:20px}
-            .message-main-content{flex:1}
-            .message-sidebar{width:280px}
-            .postbox .inside{padding:15px}
-            .postbox h2.hndle{font-size:14px;padding:8px 12px}
-            .message-content{white-space:pre-wrap;font-size:14px;line-height:1.6}
-            .sidebar-actions a,.sidebar-actions span{display:block;padding:5px 0;text-decoration:none}
-            .sidebar-actions span{color:#888}
-            .sender-info-header{background-color:#f6f7f7;padding:10px 15px;border-bottom:1px solid #ddd}
-            .sender-info-header p{margin:0 0 8px;font-size:14px}
-            .quick-reply-form textarea{width:100%;min-height:150px;margin-bottom:10px}
-            .quick-reply-form .description{font-style:italic;color:#666}
-            .notes-history{margin-top:20px}
-            .note-item{background-color:#fdfaf1;border-left:3px solid #f1c40f;padding:15px;margin-bottom:15px}
-            .note-item p{margin:0}
-            .blacklist-button{display:inline-block;text-decoration:none;background:#a00;color:#fff!important;padding:4px 8px;border-radius:3px;font-size:12px;margin-left:10px;vertical-align:middle}
-            .blacklist-button:hover{background:#c00}
-            /* New styles for our submission data table */
-            table.tw-submission-data { width: 100%; border-collapse: collapse; }
-            table.tw-submission-data th, table.tw-submission-data td { padding: 12px 15px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
-            table.tw-submission-data th { width: 25%; font-weight: bold; background-color: #fcfcfc; }
-        </style>
+        <style>.message-viewer-wrap{display:flex;gap:20px}.message-main-content{flex:1}.message-sidebar{width:280px}.postbox .inside{padding:15px}.postbox h2.hndle{font-size:14px;padding:8px 12px}.message-content{white-space:pre-wrap;font-size:14px;line-height:1.6}.sidebar-actions a,.sidebar-actions span{display:block;padding:5px 0;text-decoration:none}.sidebar-actions span{color:#888}.sender-info-header{background-color:#f6f7f7;padding:10px 15px;border-bottom:1px solid #ddd}.sender-info-header p{margin:0 0 8px;font-size:14px}.quick-reply-form textarea{width:100%;min-height:150px;margin-bottom:10px}.quick-reply-form .description{font-style:italic;color:#666}.notes-history{margin-top:20px}.note-item{background-color:#fdfaf1;border-left:3px solid #f1c40f;padding:15px;margin-bottom:15px}.note-item p{margin:0}.blacklist-button{display:inline-block;text-decoration:none;background:#a00;color:#fff!important;padding:4px 8px;border-radius:3px;font-size:12px;margin-left:10px;vertical-align:middle}.blacklist-button:hover{background:#c00}table.tw-submission-data{width:100%;border-collapse:collapse}table.tw-submission-data th,table.tw-submission-data td{padding:12px 15px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}table.tw-submission-data th{width:25%;font-weight:bold;background-color:#fcfcfc}</style>
         <div class="wrap">
             <?php if (isset($_GET['blacklisted']) && $_GET['blacklisted'] === 'true'): ?><div class="notice notice-success is-dismissible"><p>Email address has been successfully added to the blacklist.</p></div><?php endif; ?>
             <?php if (isset($_GET['replied']) && $_GET['replied'] === 'true'): ?><div class="notice notice-success is-dismissible"><p>Reply sent and saved as a note.</p></div><?php endif; ?>
@@ -150,23 +123,10 @@ if ( ! function_exists( 'render_message_detail_view' ) ) {
                             <p style="margin-bottom:0"><strong>Phone:</strong> <?php echo esc_html($pod->field('phone')?:'N/A'); ?></p>
                         </div>
                         <div class="inside">
-                            <?php // --- NEW DISPLAY LOGIC --- ?>
                             <?php if ( ! empty( $submitted_data ) && is_array( $submitted_data ) ) : ?>
-                                <table class="tw-submission-data">
-                                    <tbody>
-                                        <?php foreach ( $submitted_data as $label => $value ) : ?>
-                                            <?php if ( empty( $value ) ) continue; // Skip empty fields ?>
-                                            <tr>
-                                                <th><?php echo esc_html( $label ); ?></th>
-                                                <td><?php echo nl2br( esc_html( $value ) ); ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            <?php else : // Fallback for old entries ?>
-                                <div class="message-content">
-                                    <?php echo nl2br(esc_html(trim($user_message))); ?>
-                                </div>
+                                <table class="tw-submission-data"><tbody><?php foreach ( $submitted_data as $label => $value ) : ?><?php if ( empty( $value ) ) continue; ?><tr><th><?php echo esc_html( $label ); ?></th><td><?php echo nl2br( esc_html( $value ) ); ?></td></tr><?php endforeach; ?></tbody></table>
+                            <?php else : ?>
+                                <div class="message-content"><?php echo nl2br(esc_html(trim($raw_message))); ?></div>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -188,17 +148,41 @@ if ( ! function_exists( 'render_message_detail_view' ) ) {
 
 if ( ! function_exists( 'my_custom_message_settings_page' ) ) {
     function my_custom_message_settings_page() {
-        ?><div class="wrap"><h1>Form Message Settings</h1><form method="post" action="options.php"><?php settings_fields('my_message_settings_group');do_settings_sections('my_message_settings_page');submit_button();?></form></div><?php
+        ?><div class="wrap"><h1>Form Settings</h1><form method="post" action="options.php"><?php settings_fields('my_message_settings_group');do_settings_sections('my_message_settings_page');submit_button();?></form></div><?php
     }
 }
 
 if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
     function my_custom_message_settings_init() {
-        register_setting('my_message_settings_group','my_form_email_templates');
-        add_settings_section('email_template_section','User Confirmation Email Template',function(){echo '<p>Customize the automated email sent to users after they submit a form. Use the available placeholders.</p><p>Available placeholders: <code>{user_name}</code>, <code>{form_source}</code>, <code>{submitted_data}</code></p>';},'my_message_settings_page');
-        add_settings_field('user_email_subject','Subject',function(){$options=get_option('my_form_email_templates');echo '<input type="text" name="my_form_email_templates[subject]" value="'.esc_attr($options['subject']??'Thank you for your submission!').'" class="regular-text">';},'my_message_settings_page','email_template_section');
-        add_settings_field('user_email_body','Body',function(){$options=get_option('my_form_email_templates');$default_body="Hello {user_name},\n\nWe have successfully received your submission from the {form_source}.\n\nFor your records, here is a copy of the information you submitted:\n\n{submitted_data}\n\nSincerely,\nThe Team";echo '<textarea name="my_form_email_templates[body]" rows="10" class="large-text">'.esc_textarea($options['body']??$default_body).'</textarea>';},'my_message_settings_page','email_template_section');
+        // --- REMOVED OLD EMAIL TEMPLATE SETTINGS ---
+
+        // --- NEW DATA & PRIVACY SETTINGS ---
+        register_setting('my_message_settings_group', 'tw_forms_privacy_settings');
+        add_settings_section('privacy_settings_section', 'Data & Privacy', function() { echo '<p>Manage how form submission data is stored and retained.</p>'; }, 'my_message_settings_page');
         
+        add_settings_field('disable_ip_storage', 'IP Address Storage', function() {
+            $options = get_option('tw_forms_privacy_settings');
+            $checked = isset($options['disable_ip_storage']) && $options['disable_ip_storage'] === '1' ? 'checked="checked"' : '';
+            echo '<label><input type="checkbox" name="tw_forms_privacy_settings[disable_ip_storage]" value="1" ' . $checked . '> Do not store the submitter\'s IP address with new messages.</label>';
+        }, 'my_message_settings_page', 'privacy_settings_section');
+
+        add_settings_field('message_retention_period', 'Automatically Delete Old Messages', function() {
+            $options = get_option('tw_forms_privacy_settings');
+            $current_value = $options['message_retention_period'] ?? 'never';
+            $retention_options = [
+                'never' => 'Never',
+                '30'    => 'After 30 days',
+                '90'    => 'After 90 days',
+                '365'   => 'After 1 year',
+            ];
+            echo '<select name="tw_forms_privacy_settings[message_retention_period]">';
+            foreach ( $retention_options as $value => $label ) {
+                echo '<option value="' . esc_attr($value) . '" ' . selected($current_value, $value, false) . '>' . esc_html($label) . '</option>';
+            }
+            echo '</select><p class="description">Automatically move message entries to the trash after the selected period. This runs once daily.</p>';
+        }, 'my_message_settings_page', 'privacy_settings_section');
+        
+        // --- EXISTING RECAPTCHA SETTINGS ---
         register_setting('my_message_settings_group','my_recaptcha_settings');
         add_settings_section('recaptcha_settings_section','Google reCAPTCHA v3 Settings',function(){echo '<p>Enter your Google reCAPTCHA v3 keys here to enable spam protection on all forms. Get keys from the <a href="https://www.google.com/recaptcha/admin/create" target="_blank">reCAPTCHA Admin Console</a>.</p>';},'my_message_settings_page');
         add_settings_field('disable_recaptcha','Disable reCAPTCHA',function(){$options=get_option('my_recaptcha_settings');$checked=isset($options['disable'])&&$options['disable']==='1'?'checked="checked"':'';echo '<label><input type="checkbox" name="my_recaptcha_settings[disable]" value="1" '.$checked.'> Temporarily disable reCAPTCHA for testing.</label>';},'my_message_settings_page','recaptcha_settings_section');
@@ -208,6 +192,54 @@ if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
         add_settings_field('recaptcha_score_threshold','Score Threshold',function(){$options=get_option('my_recaptcha_settings');echo '<input type="number" step="0.1" min="0.1" max="1.0" name="my_recaptcha_settings[score_threshold]" value="'.esc_attr($options['score_threshold']??'0.5').'" class="small-text"> <p class="description">Submissions with a score below this value will be blocked. Default is 0.5. Try 0.3 if you are losing valid submissions.</p>';},'my_message_settings_page','recaptcha_settings_section');
     }
     add_action('admin_init', 'my_custom_message_settings_init');
+}
+
+// =============================================================================
+// == SCHEDULED TASK FOR DATA RETENTION
+// =============================================================================
+
+// Hook our function to a daily cron event.
+add_action( 'tw_forms_daily_retention_cron', 'tw_forms_process_message_retention' );
+
+// Schedule the event if it's not already scheduled.
+if ( ! wp_next_scheduled( 'tw_forms_daily_retention_cron' ) ) {
+    wp_schedule_event( time(), 'daily', 'tw_forms_daily_retention_cron' );
+}
+
+if ( ! function_exists( 'tw_forms_process_message_retention' ) ) {
+    /**
+     * Finds and trashes old messages based on the retention setting.
+     */
+    function tw_forms_process_message_retention() {
+        $options = get_option( 'tw_forms_privacy_settings' );
+        $retention_days = $options['message_retention_period'] ?? 'never';
+
+        // Do nothing if retention is set to 'never'.
+        if ( 'never' === $retention_days || ! is_numeric( $retention_days ) ) {
+            return;
+        }
+
+        $args = [
+            'post_type'      => 'messages',
+            'post_status'    => 'publish', // Only check published (non-trashed) messages.
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'date_query'     => [
+                [
+                    'before' => $retention_days . ' days ago',
+                    'inclusive' => true,
+                ],
+            ],
+        ];
+
+        $old_messages = get_posts( $args );
+
+        if ( ! empty( $old_messages ) ) {
+            foreach ( $old_messages as $message_id ) {
+                wp_trash_post( $message_id );
+            }
+        }
+    }
 }
 
 // =============================================================================
