@@ -3,7 +3,7 @@
  * Handles the universal [tw_form] shortcode, AJAX processing, and layout rendering.
  *
  * @package TW_Forms
- * @version 2.7.0
+ * @version 2.9.0
  */
 
 // If this file is called directly, abort.
@@ -51,12 +51,14 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
             $form_post = get_post($form_id);
             
             // --- 3a. Collect and Map All Submitted Data ---
-            $data_map          = [];
-            $all_fields_html   = '';
-            $all_fields_text   = '';
+            $data_map           = [];
+            $required_fields    = [];
+            $non_required_filled_fields = [];
+            $all_fields_html    = '';
+            $all_fields_text    = '';
             $user_email_address = '';
-            $user_name_guess   = 'Guest';
-            $user_phone_guess  = '';
+            $user_name_guess    = 'Guest';
+            $user_phone_guess   = '';
 
             foreach ( $saved_layout as $row_index => $row ) {
                 foreach ( $row['columns'] as $col_index => $column ) {
@@ -70,6 +72,9 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                         $data_map[$label] = $value;
                         $all_fields_html .= '<p style="margin: 0 0 10px 0;"><strong>' . esc_html($label) . ':</strong><br>' . nl2br(esc_html($value)) . '</p>';
                         $all_fields_text .= esc_html($label) . ":\n" . $value . "\n\n";
+
+                        if ( ! empty( $field['required'] ) ) { $required_fields[] = $label; }
+                        if ( empty( $field['required'] ) && ! empty( $value ) ) { $non_required_filled_fields[] = $label; }
                         
                         if ( $field['type'] === 'email' && empty($user_email_address) ) { $user_email_address = $value; }
                         if ( stripos( $label, 'name' ) !== false && $user_name_guess === 'Guest' ) { $user_name_guess = $value; }
@@ -83,22 +88,9 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 ['messenger_name' => $user_name_guess, 'phone' => $user_phone_guess, 'email' => $user_email_address, 'message' => $all_fields_text, 'form_source' => $form_post->post_title],
                 $data_map
             );
-            
-            // --- 3c. Send Main Admin Notification Email ---
-            $admin_email_settings = get_post_meta( $form_id, '_tw_form_admin_email', true );
-            $recipients = $admin_email_settings['to'] ?? '';
-            if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
 
-            if ( ! empty( $recipients ) && ! empty( $admin_email_settings ) && is_array( $admin_email_settings ) ) {
-                $subject    = tw_forms_process_tags( $admin_email_settings['subject'], $data_map, $form_post, $all_fields_html );
-                $message    = tw_forms_process_tags( $admin_email_settings['message'], $data_map, $form_post, $all_fields_html );
-                $from_name  = get_bloginfo('name');
-                $from_email = get_option('admin_email');
-                $headers = ['Content-Type: text/html; charset=UTF-8', "From: {$from_name} <{$from_email}>"];
-                wp_mail( $recipients, $subject, $message, $headers );
-            }
-            
-            // --- 3d. Process Conditional Notifications ---
+            // --- 3c. Process Conditional Notifications ---
+            $should_send_main_notification = true;
             $conditional_rules = get_post_meta( $form_id, '_tw_form_conditional_rules', true );
             if ( ! empty( $conditional_rules ) && is_array( $conditional_rules ) ) {
                 foreach ( $conditional_rules as $rule ) {
@@ -106,45 +98,58 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                     $operator        = $rule['operator'];
                     $expected_value  = $rule['value'];
                     $recipient_email = $rule['recipient'];
+                    $suppress        = ! empty( $rule['suppress'] );
                     $submitted_value = $data_map[ $trigger_field ] ?? null;
                     
                     $condition_met = false;
                     switch ( $operator ) {
-                        case 'is':
-                            $submitted_values_array = explode(', ', (string) $submitted_value);
-                            $condition_met = in_array( $expected_value, $submitted_values_array );
-                            break;
-                        case 'is_not':
-                            $submitted_values_array = explode(', ', (string) $submitted_value);
-                            $condition_met = ! in_array( $expected_value, $submitted_values_array );
-                            break;
-                        case 'is_empty':
-                            $condition_met = empty( $submitted_value );
-                            break;
-                        case 'is_not_empty':
-                            $condition_met = ! empty( $submitted_value );
-                            break;
-                        case 'contains':
-                            $condition_met = ( is_string($submitted_value) && strpos( $submitted_value, $expected_value ) !== false );
-                            break;
-                        case 'is_checked':
-                            $condition_met = ! empty( $submitted_value );
-                            break;
-                        case 'is_not_checked':
-                            $condition_met = empty( $submitted_value );
-                            break;
+                        case 'is': $submitted_values_array = explode(', ', (string) $submitted_value); $condition_met = in_array( $expected_value, $submitted_values_array ); break;
+                        case 'is_not': $submitted_values_array = explode(', ', (string) $submitted_value); $condition_met = ! in_array( $expected_value, $submitted_values_array ); break;
+                        case 'is_empty': $condition_met = empty( $submitted_value ); break;
+                        case 'is_not_empty': $condition_met = ! empty( $submitted_value ); break;
+                        case 'contains': $condition_met = ( is_string($submitted_value) && strpos( $submitted_value, $expected_value ) !== false ); break;
+                        case 'is_checked': $condition_met = ! empty( $submitted_value ); break;
+                        case 'is_not_checked': $condition_met = empty( $submitted_value ); break;
                     }
 
                     if ( $condition_met ) {
-                        $conditional_subject = "New Alert from " . $form_post->post_title . ": " . $trigger_field;
-                        $conditional_body    = "A new submission on the '{$form_post->post_title}' form triggered this notification because the '{$trigger_field}' field met the required condition.\n\n";
-                        $conditional_body   .= "Submitted by: " . ($user_name_guess ?? 'N/A') . "\n";
-                        $conditional_body   .= "Email Address: " . ($user_email_address ?? 'N/A') . "\n";
+                        // Check if we should suppress the main notification
+                        if ( $suppress && count($non_required_filled_fields) === 1 && $non_required_filled_fields[0] === $trigger_field ) {
+                            $should_send_main_notification = false;
+                        }
+
+                        // Determine email content (custom or default)
+                        $custom_subject = ! empty( $rule['subject'] ) ? $rule['subject'] : "New Alert from [form_name]: " . $trigger_field;
+                        $custom_message = ! empty( $rule['message'] ) ? $rule['message'] : "A new submission on the '[form_name]' form triggered this notification.\n\nSubmitted by: " . ($user_name_guess ?? 'N/A') . "\nEmail Address: " . ($user_email_address ?? 'N/A');
+                        
+                        $subject = tw_forms_process_tags( $custom_subject, $data_map, $form_post, $all_fields_html );
+                        $message = tw_forms_process_tags( $custom_message, $data_map, $form_post, $all_fields_html );
+                        
                         $from_name  = get_bloginfo('name');
                         $from_email = get_option('admin_email');
                         $headers    = ["From: {$from_name} <{$from_email}>"];
-                        wp_mail( $recipient_email, $conditional_subject, $conditional_body, $headers );
+                        wp_mail( $recipient_email, $subject, $message, $headers );
+
+                        if ( ! $should_send_main_notification ) {
+                            break; // Stop processing other rules if we've found our single sender
+                        }
                     }
+                }
+            }
+            
+            // --- 3d. Send Main Admin Notification Email (if not suppressed) ---
+            if ( $should_send_main_notification ) {
+                $admin_email_settings = get_post_meta( $form_id, '_tw_form_admin_email', true );
+                $recipients = $admin_email_settings['to'] ?? '';
+                if ( empty($recipients) ) { $recipients = get_option('admin_email'); }
+
+                if ( ! empty( $recipients ) && ! empty( $admin_email_settings ) && is_array( $admin_email_settings ) ) {
+                    $subject    = tw_forms_process_tags( $admin_email_settings['subject'], $data_map, $form_post, $all_fields_html );
+                    $message    = tw_forms_process_tags( $admin_email_settings['message'], $data_map, $form_post, $all_fields_html );
+                    $from_name  = get_bloginfo('name');
+                    $from_email = get_option('admin_email');
+                    $headers = ['Content-Type: text/html; charset=UTF-8', "From: {$from_name} <{$from_email}>"];
+                    wp_mail( $recipients, $subject, $message, $headers );
                 }
             }
 
