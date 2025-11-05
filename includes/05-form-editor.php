@@ -11,9 +11,9 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
-// -----------------------------------------------------------------------------
-// 1. REGISTER META BOXES
-// -----------------------------------------------------------------------------
+// =============================================================================
+// == 1. REGISTER META BOXES
+// =============================================================================
 if ( ! function_exists( 'tw_forms_editor_add_meta_boxes' ) ) {
     function tw_forms_editor_add_meta_boxes() {
         add_meta_box( 'tw_form_builder_mb', 'Form Layout & Fields', 'tw_forms_render_builder_mb', 'tw_form', 'normal', 'high' );
@@ -24,9 +24,9 @@ if ( ! function_exists( 'tw_forms_editor_add_meta_boxes' ) ) {
     add_action( 'add_meta_boxes_tw_form', 'tw_forms_editor_add_meta_boxes' );
 }
 
-// -----------------------------------------------------------------------------
-// 2. RENDER META BOX HTML
-// -----------------------------------------------------------------------------
+// =============================================================================
+// == 2. RENDER META BOX HTML
+// =============================================================================
 
 if ( ! function_exists( 'tw_forms_render_builder_mb' ) ) {
     function tw_forms_render_builder_mb( $post ) {
@@ -112,7 +112,7 @@ if ( ! function_exists( 'tw_forms_render_field_partial' ) ) {
                     <label class="confirm-email-option"><input type="checkbox" name="<?php echo $name_base; ?>[confirm]" value="1" <?php checked( $needs_confirm ); ?> <?php echo $disabled; ?>> Confirm?</label>
                     <label class="hide-label-option"><input type="checkbox" name="<?php echo $name_base; ?>[hide_label]" value="1" <?php checked( $hide_label ); ?> <?php echo $disabled; ?>> Hide Field Label?</label>
                 </div>
-                <div class="options-panel"><div class="setting-row"><label>Options (one per line)</label><textarea name="<?php echo $name_base; ?>[options]" rows="4" class="field-options-textarea" <?php echo $disabled; ?>><?php echo $options; ?></textarea></div><div class="setting-row multi-column-option"><label>Display in Columns</label><select name="<?php echo $name_base; ?>[cols]" <?php echo $disabled; ?>><option value="1" <?php selected($cols, '1'); ?>>1 Column</option><option value="2" <?php selected($cols, '2'); ?>>2 Columns</option><option value="3" <?php selected($cols, '3'); ?>>3 Columns</option></select></div></div>
+                <div class="options-panel"><div class="setting-row"><label>Options (one per line)</label><textarea name="<?php echo $name_base; ?>[options]" rows="4" class="field-options-textarea" <?php echo $disabled; ?>><?php echo $options; ?></textarea></div><div class="setting-row multi-column-option"><label>Display in Columns</label><select name="<?php echo $name_base; ?>[cols]" <?php echo $disabled; ?>><option value="1" <?php selected($cols, '1'); ?>>1 Column</option><option value="2" <?php selected($cols, '2'); ?>>2 Columns</option></select></div></div>
             </div>
         </div>
         <?php
@@ -196,6 +196,8 @@ if ( ! function_exists( 'tw_forms_render_conditional_rule_partial' ) ) {
                 <select name="tw_form_conditional_rules[<?php echo esc_attr( $index ); ?>][field]" class="conditional-field-select">
                     <option value="">-- Select a Field --</option>
                     <?php foreach ( $form_fields as $label => $data ) : ?>
+                        <?php // Exclude non-sensical fields for conditions
+                        if ( in_array( $data['type'], ['submit', 'section_header', 'html_block'] ) ) continue; ?>
                         <option value="<?php echo esc_attr( $label ); ?>" <?php selected( $field_label, $label ); ?>><?php echo esc_html( $label ); ?></option>
                     <?php endforeach; ?>
                 </select>
@@ -257,7 +259,11 @@ if ( ! function_exists( 'tw_forms_render_shortcode_mb' ) ) {
     function tw_forms_render_shortcode_mb( $post ) {
         $shortcode = '[tw_form id="' . $post->ID . '"]';
         ?>
-        <div class="tw-shortcode-wrapper"><p>Paste this shortcode onto any page or post to display this form.</p><input type="text" readonly="readonly" value="<?php echo esc_attr( $shortcode ); ?>" onclick="this.select();" style="width:100%;text-align:center;font-weight:bold;padding:5px;cursor:copy;"></div>
+        <div class="tw-shortcode-wrapper" style="position: relative;">
+            <p>Paste this shortcode onto any page or post to display this form.</p>
+            <input type="text" readonly="readonly" id="tw-form-shortcode-input" value="<?php echo esc_attr( $shortcode ); ?>" style="width:100%;text-align:center;font-weight:bold;padding:5px;cursor:pointer;">
+            <span id="tw-shortcode-copy-feedback" style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 5px 10px; border-radius: 3px; font-size: 12px; display: none; margin-top: 5px;">Copied!</span>
+        </div>
         <?php
     }
 }
@@ -344,9 +350,9 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
         ?>
         <script type="text/javascript">
             jQuery(document).ready(function($) {
-                // ... (Form builder JS remains unchanged) ...
                 const layoutContainer = $('#layout-container');
                 const templates = $('#tw-form-templates');
+
                 function getUniqueIndex() { return new Date().getTime(); }
                 function updateEmptyState() { if (layoutContainer.find('.row-block').length === 0) { layoutContainer.html('<p class="empty-state">No rows yet. Click "Add Row" to begin building your form.</p>'); } else { layoutContainer.find('.empty-state').remove(); } }
                 function reindexNames() {
@@ -366,32 +372,60 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     layoutContainer.sortable({ handle: '.row-header', placeholder: 'row-placeholder', update: reindexNames }).disableSelection();
                     layoutContainer.find('.column-block').sortable({ handle: '.field-header', placeholder: 'field-placeholder', connectWith: '.column-block', update: reindexNames }).disableSelection();
                 }
+
                 $('.add-row-button').on('click', function() { updateEmptyState(); const layout = $(this).data('layout'); const newRow = templates.find('#template-row-' + layout).clone().removeAttr('id'); const rowIndex = getUniqueIndex(); newRow.find('[name*="__ROW_INDEX__"]').each(function() { this.name = this.name.replace(/__ROW_INDEX__/g, rowIndex); }); layoutContainer.append(newRow); initSortables(); reindexNames(); });
-                layoutContainer.on('click', '.add-field-to-col', function() { const column = $(this).closest('.column-block'); const newField = templates.find('#template-field').clone().removeAttr('id'); newField.find('[disabled]').prop('disabled', false); newField.insertBefore($(this)); reindexNames(); newField.find('.field-type-select').trigger('change'); });
-                layoutContainer.on('click', '.delete-row', function(e) { e.preventDefault(); if (confirm('Delete this entire row?')) { $(this).closest('.row-block').remove(); updateEmptyState(); reindexNames(); } });
-                layoutContainer.on('click', '.delete-field', function(e) { e.preventDefault(); if (confirm('Delete this field?')) { $(this).closest('.form-field-block').remove(); reindexNames(); } });
+                layoutContainer.on('click', '.add-field-to-col', function() { const column = $(this).closest('.column-block'); const newField = templates.find('#template-field').clone().removeAttr('id'); newField.find('[disabled]').prop('disabled', false); newField.insertBefore($(this)); reindexNames(); newField.find('.field-type-select').trigger('change'); updateConditionalFieldData(); });
+                layoutContainer.on('click', '.delete-row', function(e) { e.preventDefault(); if (confirm('Delete this entire row?')) { $(this).closest('.row-block').remove(); updateEmptyState(); reindexNames(); updateConditionalFieldData(); } });
+                layoutContainer.on('click', '.delete-field', function(e) { e.preventDefault(); if (confirm('Delete this field?')) { $(this).closest('.form-field-block').remove(); reindexNames(); updateConditionalFieldData(); } });
+                layoutContainer.on('keyup', '.field-label-input', function() { updateConditionalFieldData(); });
+                
                 layoutContainer.on('change', '.field-type-select', function() {
                     const fieldBlock = $(this).closest('.form-field-block'); const selectedType = $(this).val(); fieldBlock.find('.field-type-label').text($(this).find('option:selected').text());
-                    const fieldHasLabel = ['text', 'email', 'tel', 'textarea', 'dropdown', 'radio_group', 'checkbox_group', 'section_header', 'submit'].includes(selectedType);
-                    const hasPlaceholder = ['text', 'email', 'tel', 'textarea'].includes(selectedType);
-                    const hasOptions = ['dropdown', 'radio_group', 'checkbox_group'].includes(selectedType);
+                    const fieldHasLabel = !['html_block'].includes(selectedType);
+                    const isChoiceField = ['dropdown', 'radio_group', 'checkbox_group'].includes(selectedType);
+                    const isInputField = ['text', 'email', 'tel', 'textarea'].includes(selectedType);
                     fieldBlock.find('.field-label-panel').toggle(fieldHasLabel);
-                    fieldBlock.find('.placeholder-panel').toggle(hasPlaceholder);
+                    fieldBlock.find('.placeholder-panel').toggle(isInputField);
                     fieldBlock.find('.html-content-panel').toggle(selectedType === 'html_block');
-                    fieldBlock.find('.setting-row-options').toggle(fieldHasLabel && selectedType !== 'html_block' && selectedType !== 'section_header' && selectedType !== 'submit');
+                    fieldBlock.find('.setting-row-options').toggle(fieldHasLabel && !['section_header', 'submit'].includes(selectedType));
                     fieldBlock.find('.confirm-email-option').toggle(selectedType === 'email');
-                    fieldBlock.find('.options-panel').toggle(hasOptions);
+                    fieldBlock.find('.options-panel').toggle(isChoiceField);
                     fieldBlock.find('.multi-column-option').toggle(selectedType === 'checkbox_group' || selectedType === 'radio_group');
                 });
+                
                 initSortables();
                 layoutContainer.find('.field-type-select').trigger('change');
 
                 // --- CONDITIONAL NOTIFICATIONS JS ---
                 const rulesContainer = $('#conditional-rules-container');
-                $('#add-conditional-rule').on('click', function(e) { e.preventDefault(); const template = $('#conditional-rule-template').html(); const newIndex = new Date().getTime(); const newRuleHTML = template.replace(/__INDEX__/g, newIndex); const newRule = $(newRuleHTML); rulesContainer.append(newRule); newRule.find('.conditional-field-select').trigger('change'); });
+                $('#add-conditional-rule').on('click', function(e) { e.preventDefault(); const template = $('#conditional-rule-template').html(); const newIndex = new Date().getTime(); const newRuleHTML = template.replace(/__INDEX__/g, newIndex); const newRule = $(newRuleHTML); rulesContainer.append(newRule); updateConditionalRule(newRule); });
                 rulesContainer.on('click', '.remove-conditional-rule', function(e) { e.preventDefault(); if (confirm('Remove this rule?')) { $(this).closest('.conditional-rule-wrapper').remove(); } });
                 rulesContainer.on('click', '.toggle-custom-message', function(e) { e.preventDefault(); const link = $(this); const editor = link.closest('.conditional-rule-wrapper').find('.custom-message-editor'); editor.slideToggle(200); link.text(editor.is(':hidden') ? 'Customize Message' : 'Hide Custom Message'); });
-
+                
+                function updateConditionalFieldData() {
+                    const fieldData = {};
+                    const conditionalFields = {};
+                    layoutContainer.find('.form-field-block').each(function() {
+                        const label = $(this).find('.field-label-input').val();
+                        const type = $(this).find('.field-type-select').val();
+                        const options = $(this).find('.field-options-textarea').val();
+                        if (label) { fieldData[label] = { type: type, options: options }; }
+                    });
+                    window.twFormFieldData = fieldData;
+                    $('.conditional-field-select').each(function() {
+                        const currentVal = $(this).val();
+                        $(this).empty().append('<option value="">-- Select a Field --</option>');
+                        for (const label in fieldData) {
+                            const type = fieldData[label].type;
+                            if (!['submit', 'section_header', 'html_block'].includes(type)) {
+                                $(this).append($('<option>', { value: label, text: label }));
+                            }
+                        }
+                        if (fieldData[currentVal]) { $(this).val(currentVal); }
+                        $(this).trigger('change');
+                    });
+                }
+                
                 function updateConditionalRule(ruleBlock) {
                     const fieldSelect = ruleBlock.find('.conditional-field-select');
                     const operatorSelect = ruleBlock.find('.conditional-operator-select');
@@ -403,7 +437,6 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     
                     const fieldInfo = (window.twFormFieldData && window.twFormFieldData[fieldName]) ? window.twFormFieldData[fieldName] : { type: 'text', options: '' };
                     const fieldType = fieldInfo.type;
-
                     const operators = { text: {'is': 'is', 'is_not': 'is not', 'is_empty': 'is empty', 'is_not_empty': 'is not empty', 'contains': 'contains'}, choice: {'is': 'is', 'is_not': 'is not'}, checkbox: {'is_checked': 'is checked', 'is_not_checked': 'is not checked'} };
                     let currentOperators = (fieldType === 'checkbox_group') ? operators.checkbox : (['dropdown', 'radio_group'].includes(fieldType) ? operators.choice : operators.text);
                     
@@ -428,15 +461,40 @@ if ( ! function_exists( 'tw_forms_editor_enqueue_scripts' ) ) {
                     }
                 }
 
-                rulesContainer.on('change', '.conditional-field-select', function() { updateConditionalRule($(this).closest('.conditional-rule-wrapper')); });
+                rulesContainer.on('change', '.conditional-field-select', function() { $(this).closest('.conditional-rule-wrapper').find('.conditional-operator-data').val(''); updateConditionalRule($(this).closest('.conditional-rule-wrapper')); });
                 rulesContainer.on('change', '.conditional-operator-select', function() { updateConditionalRule($(this).closest('.conditional-rule-wrapper')); });
                 $('.conditional-rule-wrapper').each(function() { updateConditionalRule($(this)); });
+
+                // --- SUBMIT BUTTON WARNING ---
+                $('#post').on('submit', function(e) {
+                    let hasSubmitButton = false;
+                    layoutContainer.find('.field-type-select').each(function() {
+                        if ($(this).val() === 'submit') { hasSubmitButton = true; }
+                    });
+                    if (!hasSubmitButton) {
+                        if (!confirm("Warning: You have not added a submit button to this form. It will not be functional on your website.\n\nDo you want to save anyway?")) {
+                            e.preventDefault();
+                            $('#publishing-action .spinner').removeClass('is-active');
+                            $('#publish').removeClass('disabled');
+                        }
+                    }
+                });
+
+                // --- CLICK TO COPY SHORTCODE ---
+                $('#tw-form-shortcode-input').on('click', function() {
+                    const input = $(this);
+                    navigator.clipboard.writeText(input.val()).then(function() {
+                        const feedback = $('#tw-shortcode-copy-feedback');
+                        feedback.fadeIn(200);
+                        setTimeout(() => feedback.fadeOut(500), 1500);
+                    });
+                });
             });
         </script>
         <style>
             .tw-form-builder-wrapper { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; } #layout-container { border: 1px solid #ccd0d4; background: #fff; padding: 15px; min-height: 150px; } #layout-container .empty-state { color: #777; text-align: center; margin: 40px 0; font-size: 1.2em; } .builder-actions { margin-top: 15px; padding: 10px; background: #f9f9f9; border: 1px solid #ccd0d4; } .add-row-container { display: flex; align-items: center; gap: 10px; } .row-block { border: 1px solid #999; margin-bottom: 15px; background: #fdfdfd; } .row-header { display: flex; justify-content: space-between; align-items: center; background: #e0e0e0; padding: 5px 10px; cursor: move; border-bottom: 1px solid #ccc; } .row-header .row-label { font-weight: bold; } .row-columns { display: flex; gap: 10px; padding: 10px; } .column-block { flex: 1; border: 1px dashed #ccd0d4; background: #f9f9f9; min-height: 80px; padding: 10px; } .column-block[data-layout="50-50"] { flex-basis: 50%; } .column-block[data-layout="33-33-33"] { flex-basis: 33.33%; } .column-block[data-layout="25-25-25-25"] { flex-basis: 25%; } .column-block .add-field-to-col { width: 100%; margin-top: 5px; } .form-field-block { border: 1px solid #ccd0d4; margin-bottom: 10px; background: #fff; } .field-header { display: flex; justify-content: space-between; align-items: center; background: #f0f0f1; padding: 8px 12px; cursor: move; } .field-header .field-type-label { font-weight: 700; } .field-header .field-actions a { text-decoration: none; font-size: 1.4em; margin-left: 10px; } .field-settings { padding: 12px; } .field-settings .setting-row { margin-bottom: 10px; } .field-settings .setting-row-options label { display: inline-block; margin-right: 20px; } .field-settings label { display: block; margin-bottom: 5px; font-weight: 500; } .field-settings select, .field-settings input[type=text], .field-settings input[type=email], .field-settings textarea { width: 100%; } .row-placeholder, .field-placeholder{border:2px dashed #ccd0d4;background-color:#f0f8ff;margin-bottom:15px;box-sizing:border-box;}
             .tw-email-settings-wrapper { display: flex; gap: 20px; } .tw-email-settings-wrapper .email-settings-main { flex: 1; } .tw-email-settings-wrapper .email-settings-sidebar { flex-basis: 250px; background-color: #f8f9fa; border: 1px solid #ccd0d4; padding: 15px; } .tw-email-settings-wrapper .email-settings-sidebar strong { font-size: 1.1em; } .tw-email-settings-wrapper .email-settings-sidebar .tags-list { margin-top: 10px; } .tw-email-settings-wrapper .email-settings-sidebar code { background-color: #e0e0e0; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; } .tw-email-settings-wrapper .email-settings-sidebar p { margin-top: 5px; } .tw-email-settings-wrapper .setting-row { margin-bottom: 15px; } .tw-email-settings-wrapper .setting-row input[type="text"], .tw-email-settings-wrapper .setting-row input[type="email"] { width: 100%; }
-            .conditional-rule-wrapper { background-color: #f0f0f1; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; } .conditional-rule-block { display: flex; align-items: center; gap: 8px; } .conditional-rule-block span { font-style: italic; color: #555; white-space: nowrap; } .conditional-rule-block select, .conditional-rule-block input { flex-grow: 1; } .conditional-rule-block .conditional-field-select { flex-basis: 20%; } .conditional-rule-block .conditional-operator-select { flex-basis: 15%; } .conditional-rule-block .conditional-value-wrapper { flex-basis: 20%; } .conditional-rule-block input[type="email"] { flex-basis: 25%; } .conditional-rule-block .remove-conditional-rule { font-size: 1.5em; text-decoration: none; color: #a00; flex-grow: 0; }
+            .conditional-rule-wrapper { background-color: #f0f0f1; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; } .conditional-rule-block { display: flex; align-items: center; gap: 8px; } .conditional-rule-block span { font-style: italic; color: #555; white-space: nowrap; } .conditional-rule-block select, .conditional-rule-block input, .conditional-rule-block .conditional-value-wrapper { flex-grow: 1; } .conditional-rule-block .conditional-field-select { flex-basis: 20%; } .conditional-rule-block .conditional-operator-select { flex-basis: 15%; } .conditional-rule-block .conditional-value-wrapper { flex-basis: 20%; } .conditional-rule-block input[type="email"] { flex-basis: 25%; } .conditional-rule-block .remove-conditional-rule { font-size: 1.5em; text-decoration: none; color: #a00; flex-grow: 0; }
             .conditional-rule-options { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ccc; } .toggle-custom-message { text-decoration: none; font-size: 12px; } .suppress-main-label { font-size: 12px; color: #444; }
             .custom-message-editor { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; } .custom-message-editor label { font-weight: bold; display: block; margin: 10px 0 5px; } .custom-message-editor input, .custom-message-editor textarea { width: 100%; }
         </style>
