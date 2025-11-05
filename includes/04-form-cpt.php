@@ -3,7 +3,7 @@
  * Registers the Custom Post Type for Forms.
  *
  * @package TW_Forms
- * @version 2.9.0
+ * @version 2.9.1
  */
 
 // If this file is called directly, abort.
@@ -106,24 +106,17 @@ if ( ! function_exists( 'tw_forms_duplicate_form' ) ) {
      * Handles the logic for duplicating a form post and its metadata.
      */
     function tw_forms_duplicate_form() {
-        // Security check: ensure this is a duplicate action and the nonce is valid.
         if ( ! ( isset( $_GET['post'] ) && ( isset( $_GET['action'] ) && 'tw_forms_duplicate_form' == $_GET['action'] ) ) ) {
             return;
         }
-
         $post_id = absint( $_GET['post'] );
         check_admin_referer( 'tw_forms_duplicate_form_' . $post_id );
-
-        // Get the original post.
         $post = get_post( $post_id );
         if ( ! $post ) {
             wp_die( 'Form duplication failed, could not find original form with ID: ' . esc_html( $post_id ) );
         }
-        
-        // Prepare new post data.
         $current_user    = wp_get_current_user();
         $new_post_author = $current_user->ID;
-
         $args = [
             'comment_status' => $post->comment_status,
             'ping_status'    => $post->ping_status,
@@ -139,26 +132,53 @@ if ( ! function_exists( 'tw_forms_duplicate_form' ) ) {
             'to_ping'        => $post->to_ping,
             'menu_order'     => $post->menu_order,
         ];
-
-        // Create the new post.
         $new_post_id = wp_insert_post( $args );
-
-        // Get all meta from the original post.
         $post_meta = get_post_meta( $post_id );
         if ( ! empty( $post_meta ) && is_array( $post_meta ) ) {
             foreach ( $post_meta as $meta_key => $meta_values ) {
-                // We only need the first value, as our meta keys are not repeated.
                 $meta_value = $meta_values[0];
-                // Unserialize the data.
                 $meta_value_unserialized = maybe_unserialize( $meta_value );
-                // Add the meta to the new post.
                 update_post_meta( $new_post_id, $meta_key, $meta_value_unserialized );
             }
         }
-
-        // Redirect back to the list of forms.
         wp_redirect( admin_url( 'edit.php?post_type=' . $post->post_type ) );
         exit;
     }
     add_action( 'admin_action_tw_forms_duplicate_form', 'tw_forms_duplicate_form' );
+}
+
+// =============================================================================
+// == 3. ADD SHORTCODE COLUMN TO FORM LIST
+// =============================================================================
+
+if ( ! function_exists( 'tw_forms_add_shortcode_column' ) ) {
+    /**
+     * Adds the 'Shortcode' column to the tw_form post type list.
+     */
+    function tw_forms_add_shortcode_column( $columns ) {
+        $new_columns = [];
+        foreach ( $columns as $key => $title ) {
+            $new_columns[ $key ] = $title;
+            if ( $key === 'title' ) {
+                $new_columns['shortcode'] = __( 'Shortcode', 'tw-forms' );
+            }
+        }
+        return $new_columns;
+    }
+    add_filter( 'manage_tw_form_posts_columns', 'tw_forms_add_shortcode_column' );
+}
+
+if ( ! function_exists( 'tw_forms_render_shortcode_column' ) ) {
+    /**
+     * Renders the content for the custom 'Shortcode' column.
+     */
+    function tw_forms_render_shortcode_column( $column_name, $post_id ) {
+        if ( 'shortcode' === $column_name ) {
+            $shortcode = '[tw_form id="' . $post_id . '"]';
+            echo '<div class="tw-form-shortcode-copy" title="Click to copy shortcode">';
+            echo '<input type="text" readonly value="' . esc_attr( $shortcode ) . '" style="width: 100%; cursor: pointer; text-align: center; border: 1px solid #ddd; padding: 2px 5px; background: #fafafa;">';
+            echo '</div>';
+        }
+    }
+    add_action( 'manage_tw_form_posts_custom_column', 'tw_forms_render_shortcode_column', 10, 2 );
 }
