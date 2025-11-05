@@ -3,7 +3,7 @@
  * Handles the Message Inbox, Admin Menus, and Settings UI for TW Forms.
  *
  * @package TW_Forms
- * @version 2.8.0
+ * @version 2.9.1
  */
 
 // If this file is called directly, abort.
@@ -154,27 +154,17 @@ if ( ! function_exists( 'my_custom_message_settings_page' ) ) {
 
 if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
     function my_custom_message_settings_init() {
-        // --- REMOVED OLD EMAIL TEMPLATE SETTINGS ---
-
-        // --- NEW DATA & PRIVACY SETTINGS ---
         register_setting('my_message_settings_group', 'tw_forms_privacy_settings');
         add_settings_section('privacy_settings_section', 'Data & Privacy', function() { echo '<p>Manage how form submission data is stored and retained.</p>'; }, 'my_message_settings_page');
-        
         add_settings_field('disable_ip_storage', 'IP Address Storage', function() {
             $options = get_option('tw_forms_privacy_settings');
             $checked = isset($options['disable_ip_storage']) && $options['disable_ip_storage'] === '1' ? 'checked="checked"' : '';
             echo '<label><input type="checkbox" name="tw_forms_privacy_settings[disable_ip_storage]" value="1" ' . $checked . '> Do not store the submitter\'s IP address with new messages.</label>';
         }, 'my_message_settings_page', 'privacy_settings_section');
-
         add_settings_field('message_retention_period', 'Automatically Delete Old Messages', function() {
             $options = get_option('tw_forms_privacy_settings');
             $current_value = $options['message_retention_period'] ?? 'never';
-            $retention_options = [
-                'never' => 'Never',
-                '30'    => 'After 30 days',
-                '90'    => 'After 90 days',
-                '365'   => 'After 1 year',
-            ];
+            $retention_options = ['never' => 'Never', '30' => 'After 30 days', '90' => 'After 90 days', '365' => 'After 1 year'];
             echo '<select name="tw_forms_privacy_settings[message_retention_period]">';
             foreach ( $retention_options as $value => $label ) {
                 echo '<option value="' . esc_attr($value) . '" ' . selected($current_value, $value, false) . '>' . esc_html($label) . '</option>';
@@ -182,7 +172,6 @@ if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
             echo '</select><p class="description">Automatically move message entries to the trash after the selected period. This runs once daily.</p>';
         }, 'my_message_settings_page', 'privacy_settings_section');
         
-        // --- EXISTING RECAPTCHA SETTINGS ---
         register_setting('my_message_settings_group','my_recaptcha_settings');
         add_settings_section('recaptcha_settings_section','Google reCAPTCHA v3 Settings',function(){echo '<p>Enter your Google reCAPTCHA v3 keys here to enable spam protection on all forms. Get keys from the <a href="https://www.google.com/recaptcha/admin/create" target="_blank">reCAPTCHA Admin Console</a>.</p>';},'my_message_settings_page');
         add_settings_field('disable_recaptcha','Disable reCAPTCHA',function(){$options=get_option('my_recaptcha_settings');$checked=isset($options['disable'])&&$options['disable']==='1'?'checked="checked"':'';echo '<label><input type="checkbox" name="my_recaptcha_settings[disable]" value="1" '.$checked.'> Temporarily disable reCAPTCHA for testing.</label>';},'my_message_settings_page','recaptcha_settings_section');
@@ -197,43 +186,25 @@ if ( ! function_exists( 'my_custom_message_settings_init' ) ) {
 // =============================================================================
 // == SCHEDULED TASK FOR DATA RETENTION
 // =============================================================================
-
-// Hook our function to a daily cron event.
 add_action( 'tw_forms_daily_retention_cron', 'tw_forms_process_message_retention' );
-
-// Schedule the event if it's not already scheduled.
 if ( ! wp_next_scheduled( 'tw_forms_daily_retention_cron' ) ) {
     wp_schedule_event( time(), 'daily', 'tw_forms_daily_retention_cron' );
 }
-
 if ( ! function_exists( 'tw_forms_process_message_retention' ) ) {
-    /**
-     * Finds and trashes old messages based on the retention setting.
-     */
     function tw_forms_process_message_retention() {
         $options = get_option( 'tw_forms_privacy_settings' );
         $retention_days = $options['message_retention_period'] ?? 'never';
-
-        // Do nothing if retention is set to 'never'.
         if ( 'never' === $retention_days || ! is_numeric( $retention_days ) ) {
             return;
         }
-
         $args = [
             'post_type'      => 'messages',
-            'post_status'    => 'publish', // Only check published (non-trashed) messages.
+            'post_status'    => 'publish',
             'posts_per_page' => -1,
             'fields'         => 'ids',
-            'date_query'     => [
-                [
-                    'before' => $retention_days . ' days ago',
-                    'inclusive' => true,
-                ],
-            ],
+            'date_query'     => [['before' => $retention_days . ' days ago','inclusive' => true,],],
         ];
-
         $old_messages = get_posts( $args );
-
         if ( ! empty( $old_messages ) ) {
             foreach ( $old_messages as $message_id ) {
                 wp_trash_post( $message_id );
@@ -247,11 +218,9 @@ if ( ! function_exists( 'tw_forms_process_message_retention' ) ) {
 // =============================================================================
 if ( ! function_exists( 'my_custom_message_viewer_menu' ) ) {
     function my_custom_message_viewer_menu() {
-        
         $parent_slug = 'tw-forms-dashboard';
         $inbox_slug = 'tw-forms-inbox';
         $base_page_url = 'admin.php?page=' . $inbox_slug;
-
         if ( isset($_GET['page']) && $_GET['page'] === $inbox_slug ) {
             if (isset($_GET['action']) && !isset($_GET['action2']) && isset($_GET['entry_id'])) {
                 $entry_id=intval($_GET['entry_id']);$action=sanitize_key($_GET['action']);$redirect_url=admin_url($base_page_url);if(isset($_REQUEST['post_status'])){$redirect_url=add_query_arg('post_status',sanitize_key($_REQUEST['post_status']),$redirect_url);}
@@ -339,7 +308,24 @@ if ( ! function_exists( 'custom_admin_styles_for_messages' ) ) {
                 min-width: 16px; text-align: center; border-radius: 8px;
                 font-weight: 600; padding: 0 5px; margin-left: 4px;
             }
-        </style>'; 
+            .tw-form-shortcode-copy input.copied { background-color: #d4edda !important; transition: background-color 200ms; }
+        </style>';
+        ?>
+        <script type="text/javascript">
+            jQuery(document).ready(function($) {
+                $('.tw-form-shortcode-copy input').on('click', function() {
+                    const input = $(this);
+                    navigator.clipboard.writeText(input.val()).then(function() {
+                        const originalBg = input.css('backgroundColor');
+                        input.addClass('copied');
+                        setTimeout(() => {
+                            input.removeClass('copied');
+                        }, 1000);
+                    });
+                });
+            });
+        </script>
+        <?php
     }
     add_action('admin_head', 'custom_admin_styles_for_messages');
 }
