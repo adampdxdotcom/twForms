@@ -8,6 +8,47 @@ if ( ! defined( 'WPINC' ) ) {
 // == REUSABLE HELPER FUNCTIONS FOR FORMS
 // =============================================================================
 
+if ( ! function_exists( 'tw_forms_process_tags' ) ) {
+    /**
+     * Processes a string (like an email subject or body) and replaces all merge tags with their corresponding values.
+     *
+     * @param string   $content         The string containing merge tags like [field_label].
+     * @param array    $data_map        An associative array of submitted data, mapping 'Field Label' => 'Submitted Value'.
+     * @param WP_Post  $form_post       The post object for the form being processed.
+     * @param string   $all_fields_html A pre-formatted HTML string of all submitted fields.
+     * @return string The processed string with all tags replaced.
+     */
+    function tw_forms_process_tags( $content, $data_map, $form_post, $all_fields_html ) {
+        if ( empty( $content ) || ! is_string( $content ) ) {
+            return $content;
+        }
+
+        // --- 1. Process Utility and Magic Tags ---
+        $utility_replacements = [
+            '[all_fields]'      => $all_fields_html,
+            '[form_name]'       => get_the_title( $form_post ),
+            '[page_url]'        => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( $_SERVER['HTTP_REFERER'] ) : '',
+            '[user_ip]'         => $_SERVER['REMOTE_ADDR'] ?? 'Unknown',
+            '[submission_date]' => wp_date( get_option( 'date_format' ), time() ),
+            '[submission_time]' => wp_date( get_option( 'time_format' ), time() ),
+        ];
+
+        foreach ( $utility_replacements as $tag => $value ) {
+            $content = str_replace( $tag, $value, $content );
+        }
+
+        // --- 2. Process Field-Specific Tags ---
+        if ( ! empty( $data_map ) && is_array( $data_map ) ) {
+            foreach ( $data_map as $label => $value ) {
+                $html_safe_value = nl2br( esc_html( (string) $value ) );
+                $content = str_replace( '[' . $label . ']', $html_safe_value, $content );
+            }
+        }
+
+        return $content;
+    }
+}
+
 if ( ! function_exists('verify_recaptcha_v3') ) {
     function verify_recaptcha_v3($token) {
         $recaptcha_options = get_option('my_recaptcha_settings', []);
@@ -93,11 +134,9 @@ if ( ! function_exists('validate_and_format_phone_number') ) {
 if (!function_exists('send_custom_admin_notification')) {
     function send_custom_admin_notification($to, $template_key, $form_data, $submitted_data_string) {
         if (empty($to)) {
-            return true; // Don't try to send if no recipient is set
+            return true; 
         }
-
         $admin_templates = get_option('my_admin_email_templates', []);
-
         $defaults = [
             'volunteer_subject' => 'New Volunteer Submission from {user_name}',
             'volunteer_body' => "You have received a new volunteer submission.\n\nFrom: {user_name}\nEmail: {user_email}\nPhone: {user_phone}\n\n--- Details ---\n{submitted_data}",
@@ -108,10 +147,8 @@ if (!function_exists('send_custom_admin_notification')) {
             'contact_subject' => 'New Contact Submission from {user_name}',
             'contact_body' => "You have received a new contact submission.\n\nFrom: {user_name}\nEmail: {user_email}\nPhone: {user_phone}\n\n--- Message ---\n{submitted_data}",
         ];
-
         $subject_template = $admin_templates[$template_key . '_subject'] ?? $defaults[$template_key . '_subject'];
         $body_template = $admin_templates[$template_key . '_body'] ?? $defaults[$template_key . '_body'];
-
         $replacements = [
             '{user_name}'      => $form_data['full_name'],
             '{user_email}'     => $form_data['email'],
@@ -119,17 +156,13 @@ if (!function_exists('send_custom_admin_notification')) {
             '{form_source}'    => $form_data['form_source'],
             '{submitted_data}' => $submitted_data_string,
         ];
-        
         $final_subject = str_replace(array_keys($replacements), array_values($replacements), $subject_template);
         $final_body = str_replace(array_keys($replacements), array_values($replacements), $body_template);
-
         $headers = [
             'Content-Type: text/html; charset=UTF-8',
             'Reply-To: ' . $form_data['full_name'] . ' <' . $form_data['email'] . '>',
         ];
-
         $html_body = '<div style="font-family: sans-serif; font-size: 14px; color: #333; line-height: 1.6;">' . nl2br(esc_html($final_body)) . '</div>';
-        
         return wp_mail($to, $final_subject, $html_body, $headers);
     }
 }
