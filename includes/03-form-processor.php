@@ -17,10 +17,18 @@ if ( ! defined( 'WPINC' ) ) {
 if ( ! function_exists( 'tw_forms_process_submission' ) ) {
     function tw_forms_process_submission() {
         $form_id = isset( $_POST['tw_form_id'] ) ? intval( $_POST['tw_form_id'] ) : 0;
+        if ( function_exists('tw_suite_log') ) {
+            tw_suite_log('TW Forms', "New submission initiated for Form ID #{$form_id}.", 'INFO');
+        }
         if ( ! $form_id ) return [ 'success' => false, 'message' => '<p style="color: red;">Invalid form submission.</p>' ];
 
         // --- 1. Spam & Security Checks ---
-        if ( ! empty($_POST['user_nickname_h']) ) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
+        if ( ! empty($_POST['user_nickname_h']) ) {
+            if ( function_exists('tw_suite_log') ) {
+                tw_suite_log('TW Forms', "Submission for Form ID #{$form_id} was blocked by a security or spam check (honeypot, time-trap, or nonce failure).", 'WARNING');
+            }
+            return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ];
+        }
         $time_check = isset($_POST['form_timestamp_h']) ? (time() - intval(base64_decode($_POST['form_timestamp_h']))) : 999; if ($time_check < 3) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
         if ( ! isset( $_POST['tw_form_nonce'] ) || ! wp_verify_nonce( $_POST['tw_form_nonce'], 'process_tw_form_' . $form_id ) ) { return [ 'success' => false, 'message' => '<p style="color: red;">Security check failed.</p>' ]; }
         if (!verify_recaptcha_v3($_POST['recaptcha_token'] ?? '')) { return [ 'success' => true, 'message' => '<p style="color: green;">Thank you for your submission.</p>' ]; }
@@ -168,9 +176,15 @@ if ( ! function_exists( 'tw_forms_process_submission' ) ) {
                 $headers = ['Content-Type: text/html; charset=UTF-8', "From: {$from_name} <{$from_email}>", "Reply-To: {$from_name} <{$from_email}>"];
                 wp_mail( $user_email_address, $subject, $message, $headers );
             }
-
+            
+            if ( function_exists('tw_suite_log') ) {
+                tw_suite_log('TW Forms', "Submission for Form ID #{$form_id} was successful. Admin and user notifications were sent.", 'INFO');
+            }
             return [ 'success' => true, 'message' => '<p style="color: green;">Thank you! Your submission has been received.</p>' ];
         } else {
+            if ( function_exists('tw_suite_log') ) {
+                tw_suite_log('TW Forms', "Submission failed validation for Form ID #{$form_id}. Errors: " . implode(', ', $errors), 'WARNING');
+            }
             $error_message = '<ul class="tw-form-errors">';
             foreach ( $errors as $error ) { $error_message .= '<li>' . $error . '</li>'; }
             $error_message .= '</ul>';
